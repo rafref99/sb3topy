@@ -123,6 +123,7 @@ class Target:
         # Create the pygame sprite
         self.sprite = DirtySprite()
         setattr(self.sprite, 'target', self)
+        self._shown = True
 
         # Set dirty
         self.dirty = True
@@ -142,6 +143,7 @@ class Target:
             self._xpos = parent._xpos
             self._ypos = parent._ypos
             self._direction = parent._direction
+            self._shown = parent._shown
             self.sprite.visible = parent.sprite.visible
             self.pen = parent.pen.copy(self)
 
@@ -346,12 +348,12 @@ class Target:
     @property
     def shown(self) -> bool:
         """Whether the sprite is currently visible"""
-        # Getter not actually used
-        return self.sprite.visible
+        return self._shown
 
     @shown.setter
     def shown(self, value: bool):
-        self.sprite.visible = value
+        self._shown = bool(value)
+        self._update_effective_visibility()
 
         # Update dirty
         # sprite.dirty is set by the visible property
@@ -413,9 +415,20 @@ class Target:
             self._update_rect(display)
             self.dirty = False
 
+        self._update_effective_visibility()
+
         # Update the sprite mask, if requested
         if create_mask and not self.sprite.mask:
             self.sprite.mask = self.costume.get_mask()
+
+    def _update_effective_visibility(self):
+        """Sync render visibility with Scratch's shown state and ghost effect."""
+        costume = getattr(self, 'costume', None)
+        ghost = costume.effects.get('ghost', 0.0) if costume is not None else 0.0
+        visible = self._shown and ghost < 100.0
+        if self.sprite.visible != visible:
+            self.sprite.visible = visible
+            self.sprite.dirty = 1
 
     def _update_image(self, display: Any):
         """Updates and transforms the sprites image"""
@@ -429,6 +442,10 @@ class Target:
 
     def _update_rect(self, display: Any):
         """Updates the rect to match the sprite's position and orientation"""
+        old_rect = getattr(self.sprite, "rect", None)
+        if old_rect is not None:
+            old_rect = old_rect.copy()
+
         # Rotate the rect properly
         costume = self.costume
         offset = costume.costume['offset'] * (costume.size / 100)
@@ -442,6 +459,14 @@ class Target:
 
         # Move the rect by the stage offset
         self.sprite.rect.move_ip(*display.rect.topleft)
+
+        if (
+            old_rect
+            and old_rect.width
+            and old_rect.height
+            and old_rect != self.sprite.rect
+        ):
+            self.sprite._sb3topy_previous_rect = old_rect
 
         self.sprite.dirty = 1
 

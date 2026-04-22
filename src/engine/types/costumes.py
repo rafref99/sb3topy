@@ -72,10 +72,11 @@ class Costumes:
             for index, asset in enumerate(costumes):
                 # Load the image
                 asset['image'] = self._load_image(asset['path'])
+                crop_offset = self._trim_transparent_border(asset)
 
                 # Calculate the rotation offset
                 center = pg.math.Vector2(asset['image'].get_size()) / 2
-                asset['offset'] = pg.math.Vector2(asset['center'])
+                asset['offset'] = pg.math.Vector2(asset['center']) - crop_offset
                 asset['offset'] *= -1
                 asset['offset'] += center
                 asset['offset'] /= asset['scale']
@@ -106,6 +107,25 @@ class Costumes:
                 self._cache[path] = image
 
         return image
+
+    @staticmethod
+    def _trim_transparent_border(asset: Dict[str, Any]) -> pg.math.Vector2:
+        """Crop empty transparent borders while preserving costume center."""
+        image = asset['image']
+
+        if not image.get_masks()[3]:
+            return pg.math.Vector2()
+
+        rect = image.get_bounding_rect(min_alpha=1)
+        if rect.size == image.get_size() or rect.width == 0 or rect.height == 0:
+            return pg.math.Vector2()
+
+        cropped = pg.Surface(rect.size, pg.SRCALPHA).convert_alpha()
+        cropped.fill((0, 0, 0, 0))
+        cropped.blit(image, (0, 0), rect)
+        asset['image'] = cropped
+
+        return pg.math.Vector2(rect.topleft)
 
     def switch(self, costume: Union[str, float]):
         """Sets the costume"""

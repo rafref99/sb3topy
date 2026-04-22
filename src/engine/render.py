@@ -126,39 +126,32 @@ class Render:
 
     def draw(self, display):
         """Handles drawing everything"""
-        # Update the background, if necessary
-        if self.stage.dirty:
-            # Create a new bg_image
-            bg_image = pg.Surface(display.size).convert()
-            bg_image.fill((255, 255, 255))
-            bg_image.blit(self.stage.image, display.rect.topleft)
-            self.stage.dirty = 0
+        for sprite in self.group:
+            previous_rect = getattr(sprite, "_sb3topy_previous_rect", None)
+            if previous_rect is not None:
+                self.group.repaint_rect(previous_rect)
+                delattr(sprite, "_sb3topy_previous_rect")
 
-            # Draw the pen
-            bg_image.blit(Pen.image, display.rect.topleft)
-            Pen.dirty = []
+        display.screen.fill((255, 255, 255))
+        display.screen.blit(self.stage.image, display.rect.topleft)
+        self.stage.dirty = 0
 
-            # Update the DirtySprite group
-            # Even when passed screen, group.clear
-            # doesn't draw anything. Using set_clip
-            # forces a full redraw next call of draw
-            self.group.clear(None, bg_image)
-            self.group.set_clip(display.rect)
+        if Pen.image is not None:
+            display.screen.blit(Pen.image, display.rect.topleft)
+        Pen.dirty = []
 
-        elif Pen.dirty:
-            # Create a new bg_image
-            bg_image = pg.Surface(display.size).convert()
-            bg_image.fill((255, 255, 255))
-            bg_image.blit(self.stage.image, display.rect.topleft)
-            bg_image.blit(Pen.image, display.rect.topleft)
-            self.group.clear(None, bg_image)
+        for sprite in self.group:
+            if sprite.visible:
+                display.screen.blit(
+                    sprite.image,
+                    sprite.rect,
+                    sprite.source_rect,
+                    sprite.blendmode,
+                )
+            if sprite.dirty == 1:
+                sprite.dirty = 0
 
-            # Update rects on the screen
-            for rect in Pen.dirty:
-                self.group.repaint_rect(rect)
-
-        # Draw the sprites
-        self.rects.extend(self.group.draw(display.screen))
+        self.rects.append(display.screen.get_rect())
 
         # Draw the monitors
         self.draw_monitors(display)

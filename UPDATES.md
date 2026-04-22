@@ -101,3 +101,22 @@ This file documents the changes and improvements made during the project rework.
 - Verified the full pytest suite with `PYTHONPATH=src python3 -m pytest -q`.
 - Confirmed `python3 -m compileall -q src/sb3topy` and `git diff --check` pass for the touched files.
 - Added `tests/test_strict_integration.py`, a stricter end-to-end test that verifies generated output structure, copied engine fixes, converted SVG PNG assets, monitor setup code, and clean headless QUIT shutdown.
+
+## [2026-04-22] - Rendering and SVG Transparency Fixes
+
+### Engine Rendering Fixes
+- Fixed ghost-effect redraw behavior for sprites that move or change transparency by repainting previous sprite rectangles before drawing the next frame.
+- Treated sprites with `ghost` effect at `100` as render-invisible while preserving their logical Scratch `shown` state, allowing fully ghosted intro/thumbnail sprites to disappear correctly.
+- Reworked the renderer to redraw the full stage, pen layer, sprites, and monitors every frame instead of relying on Pygame dirty-rect compositing for transparent sprites. This fixes black rectangles where transparent SVG costume areas blocked the stage background.
+- Cropped fully transparent borders from loaded costumes while preserving Scratch costume centers, reducing oversized transparent sprite surfaces and improving rendering robustness.
+
+### SVG Conversion Fixes
+- Normalized converted SVG PNG outputs to `RGBA` after CairoSVG, pyvips, or command-based conversion.
+- Added transparent-edge cleanup for SVG PNGs so black matte pixels do not bleed into scaled or rotated costumes.
+- Added detection for converter-created uniform opaque edge backgrounds and clears those edge-connected regions back to transparent.
+- Kept empty transparent backgrounds transparent instead of filling entire transparent canvases with an average artwork color.
+
+### Testing
+- Expanded `tests/test_engine_effects.py` to cover ghost render visibility, transparent sprite compositing over the stage, and transparent-border trimming.
+- Added `tests/test_svg_conversion.py` to cover SVG PNG alpha normalization, edge-only color bleed, RGB/RGBA conversion, and opaque edge-background cleanup.
+- Verified the full pytest suite with `PYTHONPATH=src python3 -m pytest -q`.

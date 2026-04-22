@@ -22,6 +22,8 @@ This project is being significantly improved and modernized with the assistance 
 - Generated projects initialize Scratch monitors after runtime sprite setup, avoiding startup crashes in Download & Run.
 - Generated projects cancel Scratch tasks and close the asyncio loop directly so the Pygame window can quit cleanly.
 - Homebrew Cairo is detected automatically on macOS so SVG costumes convert to PNGs instead of making Pygame load large SVGs at startup.
+- SVG costume conversion now preserves transparent backgrounds and cleans converter-created matte/edge artifacts.
+- The engine redraws transparent sprites over the stage correctly, including ghosted sprites and SVG costumes with transparent backgrounds.
 - Output folders are created automatically when converting to a new directory.
 - CLI-style calls such as `main.main(["sb3topy", "project.sb3", "out"])` are supported for integration tests and tooling.
 - Unsupported Scratch monitor types are skipped with warnings instead of stopping project conversion.

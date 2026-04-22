@@ -102,6 +102,7 @@ def _convert_svg_cairo():
         try:
             cairosvg.svg2png(url=svg_path, write_to=png_path,
                              scale=config.SVG_SCALE)
+            normalize_png_alpha(png_path)
 
         # Handle an unexpected error
         except ValueError:
@@ -145,6 +146,7 @@ def _convert_svg_pyvips():
         pyvips.Image.svgload(
             svg_path, memory=True, scale=config.SVG_SCALE
         ).pngsave(png_path)
+        normalize_png_alpha(png_path)
 
         return filename
     return convert_svg
@@ -216,6 +218,7 @@ def convert_svg_cmd(svg_path, output_dir, md5ext):
         logger.error("Failed to save svg %s:\n%s\n%s\n",
                      md5ext, cmd_str, result.stderr.rstrip())
         return None
+    normalize_png_alpha(png_path)
     return filename
 
 
@@ -233,3 +236,111 @@ def fallback_image(_svg_path, output_dir, md5ext):
         image_file.write(config.FALLBACK_IMAGE)
 
     return filename
+
+
+def normalize_png_alpha(png_path):
+    """
+    Ensure converted SVG PNGs keep alpha and do not carry a black matte.
+
+    Some converters and image pipelines leave fully transparent pixels with
+    black RGB values. Those pixels are invisible until a later scale/rotate
+    operation samples across the edge. Only pixels touching visible artwork
+    are bled; the empty background stays fully transparent black.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+
+    try:
+        source_image = Image.open(png_path)
+        original_mode = source_image.mode
+        image = source_image.convert("RGBA")
+    except OSError:
+        logger.exception("Failed to normalize alpha for '%s':", png_path)
+        return
+
+    alpha = image.getchannel("A")
+    if "A" not in original_mode or alpha.getextrema() == (255, 255):
+        _clear_uniform_edge_background(image)
+
+    pixels = image.load()
+    width, height = image.size
+    edge_updates = {}
+
+    for y in range(height):
+        for x in range(width):
+            if pixels[x, y][3] != 0:
+                continue
+
+            neighbors = []
+            for nx in range(max(0, x - 1), min(width, x + 2)):
+                for ny in range(max(0, y - 1), min(height, y + 2)):
+                    if nx == x and ny == y:
+                        continue
+                    red, green, blue, pixel_alpha = pixels[nx, ny]
+                    if pixel_alpha:
+                        neighbors.append((red, green, blue))
+
+            if neighbors:
+                edge_updates[(x, y)] = tuple(
+                    round(sum(color[index] for color in neighbors) / len(neighbors))
+                    for index in range(3)
+                )
+
+    for (x, y), color in edge_updates.items():
+        pixels[x, y] = (*color, 0)
+
+    if edge_updates or original_mode != "RGBA":
+        image.save(png_path)
+
+
+def _clear_uniform_edge_background(image):
+    """Make a solid converter-added edge background transparent."""
+    pixels = image.load()
+    width, height = image.size
+    corner_colors = [
+        pixels[0, 0][:3],
+        pixels[width - 1, 0][:3],
+        pixels[0, height - 1][:3],
+        pixels[width - 1, height - 1][:3],
+    ]
+
+    background = max(set(corner_colors), key=corner_colors.count)
+    if corner_colors.count(background) < 3:
+        return
+
+    stack = []
+    seen = set()
+    for x in range(width):
+        stack.append((x, 0))
+        stack.append((x, height - 1))
+    for y in range(height):
+        stack.append((0, y))
+        stack.append((width - 1, y))
+
+    clear_pixels = []
+    while stack:
+        x, y = stack.pop()
+        if (x, y) in seen:
+            continue
+        seen.add((x, y))
+
+        if pixels[x, y][:3] != background:
+            continue
+
+        clear_pixels.append((x, y))
+        if x > 0:
+            stack.append((x - 1, y))
+        if x < width - 1:
+            stack.append((x + 1, y))
+        if y > 0:
+            stack.append((x, y - 1))
+        if y < height - 1:
+            stack.append((x, y + 1))
+
+    if len(clear_pixels) == width * height:
+        return
+
+    for x, y in clear_pixels:
+        pixels[x, y] = (*background, 0)
