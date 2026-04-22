@@ -7,7 +7,7 @@ TODO export config
 """
 
 # from ctypes import windll
-import tkinter as tk
+import customtkinter as ctk
 
 from .. import config, main
 from .convert import ConvertFrame
@@ -17,14 +17,15 @@ from .settings import SettingsFrame
 from .sidebar import Sidebar
 
 # windll.shcore.SetProcessDpiAwareness(True)
-
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
 
 def run_app():
     """Runs the GUI App"""
     App().mainloop()
 
 
-class App(tk.Tk):
+class App(ctk.CTk):
     """Main App class"""
 
     def __init__(self):
@@ -32,23 +33,23 @@ class App(tk.Tk):
         self.title("sb3topy")
 
         # Adjust the window size
-        scale = round(self.winfo_fpixels('1i')) / 96
-        self.geometry(f"{round(720*scale)}x{round(480*scale)}")
+        # scale = round(self.winfo_fpixels('1i')) / 96
+        self.geometry("800x624")
         # self.resizable(0, 0)
-        self.scale = scale
+        self.scale = 1.0
 
         # Create config variables
         self.init_config()
         self.read_config()
 
-        self.mode = tk.StringVar()
+        self.mode = ctk.StringVar()
         self.mode.trace_add('write', self.cb_mode)
 
         sidebar = Sidebar(self, self.mode)
-        self.convert = ConvertFrame(self, padding="5 0 5 5")
-        self.examples = ExamplesFrame(self, padding="5 0 5 5")
-        self.output = OutputFrame(self, padding="5 0 5 5")
-        self.settings = SettingsFrame(self, padding="5 0 5 5")
+        self.convert = ConvertFrame(self)
+        self.examples = ExamplesFrame(self)
+        self.output = OutputFrame(self)
+        self.settings = SettingsFrame(self)
 
         sidebar.grid(column=0, row=0, sticky="NSEW")
         self.convert.grid(column=1, row=0, sticky="NSWE")
@@ -87,95 +88,97 @@ class App(tk.Tk):
     def init_config(self):
         """Creates config variables"""
         # Unsorted
-        tk.BooleanVar(self, name="AUTORUN")
-        tk.Variable(self, name="JSON_SHA")
-        tk.BooleanVar(self, name="CONVERT_ASSETS")
-        tk.StringVar(self, name="CONFIG_PATH")
-        tk.BooleanVar(self, name="AUTOLOAD_CONFIG")
+        ctk.BooleanVar(self, name="AUTORUN")
+        ctk.Variable(self, name="JSON_SHA")
+        ctk.BooleanVar(self, name="CONVERT_ASSETS")
+        ctk.BooleanVar(self, name="PARSE_PROJECT")
+        ctk.BooleanVar(self, name="COPY_ENGINE")
+        ctk.StringVar(self, name="CONFIG_PATH")
+        ctk.BooleanVar(self, name="AUTOLOAD_CONFIG")
 
         # General / Paths
-        tk.StringVar(self, name="OUTPUT_PATH")
-        tk.StringVar(self, name="PROJECT_PATH")
-        tk.StringVar(self, name="PROJECT_URL")
+        ctk.StringVar(self, name="OUTPUT_PATH")
+        ctk.StringVar(self, name="PROJECT_PATH")
+        ctk.StringVar(self, name="PROJECT_URL")
 
         # Assets / Extraction
-        tk.BooleanVar(self, name="VERIFY_ASSETS")
-        tk.BooleanVar(self, name="FRESHEN_ASSETS")
-        tk.BooleanVar(self, name="RECONVERT_SOUNDS")
-        tk.BooleanVar(self, name="RECONVERT_IMAGES")
+        ctk.BooleanVar(self, name="VERIFY_ASSETS")
+        ctk.BooleanVar(self, name="FRESHEN_ASSETS")
+        ctk.BooleanVar(self, name="RECONVERT_SOUNDS")
+        ctk.BooleanVar(self, name="RECONVERT_IMAGES")
 
         # Assets / Workers
-        tk.IntVar(self, name="DOWNLOAD_THREADS")
-        tk.IntVar(self, name="CONVERT_THREADS")
-        tk.IntVar(self, name="CONVERT_TIMEOUT")
+        ctk.IntVar(self, name="DOWNLOAD_THREADS")
+        ctk.IntVar(self, name="CONVERT_THREADS")
+        ctk.IntVar(self, name="CONVERT_TIMEOUT")
 
         # Assets / SVGs
-        tk.BooleanVar(self, name="USE_SVG_CMD")
-        tk.StringVar(self, name="SVG_COMMAND")
-        tk.IntVar(self, name="SVG_SCALE")
-        # tk.IntVar(self, name="SVG_DPI")
-        tk.BooleanVar(self, name="CONVERT_COSTUMES")
+        ctk.BooleanVar(self, name="USE_SVG_CMD")
+        ctk.StringVar(self, name="SVG_COMMAND")
+        ctk.IntVar(self, name="SVG_SCALE")
+        # ctk.IntVar(self, name="SVG_DPI")
+        ctk.BooleanVar(self, name="CONVERT_COSTUMES")
 
         # Assets / MP3s
-        tk.BooleanVar(self, name="CONVERT_SOUNDS")
-        tk.StringVar(self, name="MP3_COMMAND")
+        ctk.BooleanVar(self, name="CONVERT_SOUNDS")
+        ctk.StringVar(self, name="MP3_COMMAND")
 
         # Optimizations / Basic
-        tk.BooleanVar(self, name="LEGACY_LISTS")
-        tk.BooleanVar(self, name="VAR_TYPES")
-        tk.BooleanVar(self, name="ARG_TYPES")
-        tk.BooleanVar(self, name="LIST_TYPES")
+        ctk.BooleanVar(self, name="LEGACY_LISTS")
+        ctk.BooleanVar(self, name="VAR_TYPES")
+        ctk.BooleanVar(self, name="ARG_TYPES")
+        ctk.BooleanVar(self, name="LIST_TYPES")
 
         # Optimizations / Advanced
-        tk.BooleanVar(self, name="DISABLE_ANY_CAST")
-        tk.BooleanVar(self, name="AGGRESSIVE_NUM_CAST")
-        tk.BooleanVar(self, name="CHANGED_NUM_CAST")
-        tk.BooleanVar(self, name="DISABLE_STR_CAST")
-        tk.BooleanVar(self, name="DISABLE_INT_CAST")
+        ctk.BooleanVar(self, name="DISABLE_ANY_CAST")
+        ctk.BooleanVar(self, name="AGGRESSIVE_NUM_CAST")
+        ctk.BooleanVar(self, name="CHANGED_NUM_CAST")
+        ctk.BooleanVar(self, name="DISABLE_STR_CAST")
+        ctk.BooleanVar(self, name="DISABLE_INT_CAST")
 
         # Project / Timings
-        tk.IntVar(self, name="TARGET_FPS")
-        tk.BooleanVar(self, name="TURBO_MODE")
-        tk.IntVar(self, name="WORK_TIME_INV")
-        tk.DoubleVar(self, name="WARP_TIME")
+        ctk.IntVar(self, name="TARGET_FPS")
+        ctk.BooleanVar(self, name="TURBO_MODE")
+        ctk.IntVar(self, name="WORK_TIME_INV")
+        ctk.DoubleVar(self, name="WARP_TIME")
 
         # Project / Display
-        tk.IntVar(self, name="STAGE_WIDTH")
-        tk.IntVar(self, name="STAGE_HEIGHT")
-        tk.IntVar(self, name="DISPLAY_WIDTH")
-        tk.IntVar(self, name="DISPLAY_HEIGHT")
-        tk.BooleanVar(self, name="ALLOW_RESIZE")
-        tk.BooleanVar(self, name="SCALED_DISPLAY")
-        tk.IntVar(self, name="FS_SCALE")
-        tk.IntVar(self, name="FLIP_THRESHOLD_INV")
+        ctk.IntVar(self, name="STAGE_WIDTH")
+        ctk.IntVar(self, name="STAGE_HEIGHT")
+        ctk.IntVar(self, name="DISPLAY_WIDTH")
+        ctk.IntVar(self, name="DISPLAY_HEIGHT")
+        ctk.BooleanVar(self, name="ALLOW_RESIZE")
+        ctk.BooleanVar(self, name="SCALED_DISPLAY")
+        ctk.IntVar(self, name="FS_SCALE")
+        ctk.IntVar(self, name="FLIP_THRESHOLD_INV")
 
         # Project / Title
-        tk.BooleanVar(self, name="DYNAMIC_TITLE")
-        tk.StringVar(self, name="TITLE")
+        ctk.BooleanVar(self, name="DYNAMIC_TITLE")
+        ctk.StringVar(self, name="TITLE")
 
         # Project / Audio
-        tk.IntVar(self, name="AUDIO_CHANNELS")
-        tk.IntVar(self, name="MASTER_VOLUME")
+        ctk.IntVar(self, name="AUDIO_CHANNELS")
+        ctk.IntVar(self, name="MASTER_VOLUME")
 
         # Project / Limits
-        tk.IntVar(self, name="MAX_CLONES")
-        tk.IntVar(self, name="MAX_LIST")
+        ctk.IntVar(self, name="MAX_CLONES")
+        ctk.IntVar(self, name="MAX_LIST")
 
         # Project / Hotkeys
-        tk.BooleanVar(self, name="TURBO_HOTKEY")
-        tk.BooleanVar(self, name="FULLSCREEN_HOTKEY")
-        tk.BooleanVar(self, name="DEBUG_HOTKEYS")
+        ctk.BooleanVar(self, name="TURBO_HOTKEY")
+        ctk.BooleanVar(self, name="FULLSCREEN_HOTKEY")
+        ctk.BooleanVar(self, name="DEBUG_HOTKEYS")
 
         # Project / Miscellaneous
-        tk.BooleanVar(self, name="DRAW_FPS")
-        tk.StringVar(self, name="USERNAME")
-        tk.IntVar(self, name="RANDOM_SEED")
+        ctk.BooleanVar(self, name="DRAW_FPS")
+        ctk.StringVar(self, name="USERNAME")
+        ctk.IntVar(self, name="RANDOM_SEED")
 
         # Debug / Debug
-        tk.IntVar(self, name="LOG_LEVEL")
-        tk.BooleanVar(self, name="DEBUG_JSON")
-        tk.BooleanVar(self, name="FORMAT_JSON")
-        tk.BooleanVar(self, name="OVERWRITE_ENGINE")
+        ctk.IntVar(self, name="LOG_LEVEL")
+        ctk.BooleanVar(self, name="DEBUG_JSON")
+        ctk.BooleanVar(self, name="FORMAT_JSON")
+        ctk.BooleanVar(self, name="OVERWRITE_ENGINE")
 
     def run_main(self):
         """Runs the converter with the current config"""
@@ -193,6 +196,8 @@ class App(tk.Tk):
         self.setvar("AUTORUN", config.AUTORUN)
         self.setvar("JSON_SHA", config.JSON_SHA)
         self.setvar("CONVERT_ASSETS", config.CONVERT_ASSETS)
+        self.setvar("PARSE_PROJECT", config.PARSE_PROJECT)
+        self.setvar("COPY_ENGINE", config.COPY_ENGINE)
         self.setvar("CONFIG_PATH", config.CONFIG_PATH)
         self.setvar("AUTOLOAD_CONFIG", config.AUTOLOAD_CONFIG)
 
@@ -292,6 +297,8 @@ class App(tk.Tk):
         config.AUTORUN = tkbool(self.getvar("AUTORUN"))
         config.JSON_SHA = self.getvar("JSON_SHA")
         config.CONVERT_ASSETS = tkbool(self.getvar("CONVERT_ASSETS"))
+        config.PARSE_PROJECT = tkbool(self.getvar("PARSE_PROJECT"))
+        config.COPY_ENGINE = tkbool(self.getvar("COPY_ENGINE"))
         config.CONFIG_PATH = self.getvar("CONFIG_PATH")
         config.AUTOLOAD_CONFIG = tkbool(self.getvar("AUTOLOAD_CONFIG"))
 

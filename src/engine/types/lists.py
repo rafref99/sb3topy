@@ -5,8 +5,12 @@ Handles custom list data structures
 """
 
 import random
+from typing import Any, List as PyList, Union, TYPE_CHECKING
 
 from ..operators import toint
+
+if TYPE_CHECKING:
+    from .target import Target
 
 __all__ = ['List', 'StaticList']
 
@@ -21,34 +25,37 @@ class List:
 
     __slots__ = ('list',)
 
-    def __init__(self, values):
+    def __init__(self, values: PyList[Any]):
         self.list = values
 
-    def __getitem__(self, key):
-        key -= 1
-        if 0 <= key < len(self.list):
-            return self.list[key]
+    def __getitem__(self, key: Union[int, str]) -> Any:
+        if isinstance(key, str):
+            return self.get(key)
+
+        index = int(key) - 1
+        if 0 <= index < len(self.list):
+            return self.list[index]
         return ""
 
-    def get(self, key):
+    def get(self, key: Union[int, str]) -> Any:
         """
         Gets an item, supporting legacy indices
         (first, last, random)
         """
         if key == 'first':
-            return self.list[0]
+            return self.list[0] if self.list else ""
         if key == 'last':
-            return self.list[-1]
+            return self.list[-1] if self.list else ""
         if key == 'random':
-            return random.choice(self.list)
+            return random.choice(self.list) if self.list else ""
         return self.__getitem__(toint(key))
 
-    def __setitem__(self, key, value):
-        key -= 1
-        if 0 <= key < len(self.list):
-            self.list[key] = value
+    def __setitem__(self, key: Union[int, str], value: Any):
+        index = toint(key) - 1
+        if 0 <= index < len(self.list):
+            self.list[index] = value
 
-    def set(self, key, item):
+    def set(self, key: Union[int, str], item: Any):
         """
         Sets an item, supporting legacy indices
         (first, last, random)
@@ -58,21 +65,22 @@ class List:
         elif key == 'last':
             self.__setitem__(len(self.list), item)
         elif key == 'random':
-            self.__setitem__(random.randint(1, len(self.list)), item)
+            if self.list:
+                self.__setitem__(random.randint(1, len(self.list)), item)
         else:
             self.__setitem__(toint(key), item)
 
-    def append(self, value):
+    def append(self, value: Any):
         """Add an item to list"""
         self.list.append(value)
 
-    def insert(self, key, value):
+    def insert(self, key: int, value: Any):
         """Insert an item in list"""
-        key -= 1
-        if 0 <= key <= len(self.list):
-            self.list.insert(key, value)
+        index = key - 1
+        if 0 <= index <= len(self.list):
+            self.list.insert(index, value)
 
-    def insert2(self, key, item):
+    def insert2(self, key: Union[int, str], item: Any):
         """
         Inserts an item, supporting legacy indices
         (first, last random)
@@ -82,17 +90,17 @@ class List:
         elif key == 'last':
             self.append(item)
         elif key == 'random':
-            self.insert(random.randint(1, len(self.list)), item)
+            self.insert(random.randint(1, len(self.list) + 1), item)
         else:
             self.insert(toint(key), item)
 
-    def delete(self, key):
+    def delete(self, key: int):
         """Remove an item from list"""
-        key -= 1
-        if 0 <= key < len(self.list):
-            del self.list[key]
+        index = key - 1
+        if 0 <= index < len(self.list):
+            del self.list[index]
 
-    def delete2(self, key):
+    def delete2(self, key: Union[int, str]):
         """
         Deletes an item, supporting legacy indices
         (first, last, random, all)
@@ -104,7 +112,8 @@ class List:
         elif key == 'last':
             self.delete(len(self.list))
         elif key == 'random':
-            self.delete(random.randint(1, len(self.list)))
+            if self.list:
+                self.delete(random.randint(1, len(self.list)))
         else:
             self.delete(toint(key))
 
@@ -112,18 +121,21 @@ class List:
         """Deletes all items in list"""
         self.list = []
 
-    def __contains__(self, item):
-        item = search_str(item)
-        return any(item == search_str(value) for value in self.list)
+    def __contains__(self, item: Any) -> bool:
+        search_item = search_str(item)
+        return any(search_item == search_str(value) for value in self.list)
 
-    def join(self):
+    def join(self) -> str:
         """Joins the list"""
         if all(len(search_str(item)) == 1 for item in self.list):
-            return ''.join(self.list)
-        return ' '.join(self.list)
+            return ''.join(map(str, self.list))
+        return ' '.join(map(str, self.list))
 
-    def __len__(self):
-        return self.list.__len__()
+    def __len__(self) -> int:
+        return len(self.list)
+
+    def __iter__(self):
+        return iter(self.list)
 
     # TODO Variable/list reporters
     def show(self):
@@ -133,15 +145,15 @@ class List:
     def hide(self):
         """Do nothing"""
 
-    def index(self, item):
+    def index(self, item: Any) -> int:
         """Gets the position of item in list"""
-        item = search_str(item)
+        search_item = search_str(item)
         for i, value in enumerate(self.list):
-            if item == search_str(value):
+            if search_item == search_str(value):
                 return i + 1
         return 0
 
-    def copy(self):
+    def copy(self) -> 'List':
         """Return a copy of this List"""
         return self.__class__(self.list.copy())
 
@@ -159,26 +171,26 @@ class StaticList(List):
 
     __slots__ = ('dict',)
 
-    def __init__(self, values):  # pylint: disable=super-init-not-called
+    def __init__(self, values: PyList[Any]):  # pylint: disable=super-init-not-called
         self.list = tuple(values)
 
         self.dict = {}
         for i, item in enumerate(values):
-            self.dict.setdefault(search_str(item), i+1)
+            self.dict.setdefault(search_str(item), i + 1)
 
-    def index(self, item):
+    def index(self, item: Any) -> int:
         """Gets the position of item in list"""
         return self.dict.get(search_str(item), 0)
 
-    def __contains__(self, item):
+    def __contains__(self, item: Any) -> bool:
         return search_str(item) in self.dict
 
-    def copy(self):
+    def copy(self) -> 'StaticList':
         """Returns self; this list is static"""
         return self
 
 
-def search_str(value):
+def search_str(value: Any) -> str:
     """
     Gets a lowercase str for searching
     Also handles integer floats.

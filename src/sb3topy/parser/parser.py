@@ -104,7 +104,11 @@ class Parser:
             self.target = target
             code = code + self.parse_target(target) + "\n\n\n"
 
-        code = code + "\n\n" + codemap.file_footer() + "\n"
+        # Parse monitors
+        monitors_code = codemap.parse_monitors(
+            self.project.get('monitors', []), self.targets)
+
+        code = code + "\n\n" + codemap.file_footer(monitors_code) + "\n"
 
         return code
 

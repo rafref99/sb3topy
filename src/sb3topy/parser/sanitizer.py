@@ -9,11 +9,12 @@ TODO Would repr() be a better way to quote strings?
 import logging
 import math
 import re
+from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
 
-def clean_identifier(text, default='identifier'):
+def clean_identifier(text: str, default: str = 'identifier') -> str:
     """Strips invalid character from an identifier"""
     # TODO Keep preluding underscores?
     cleaned = re.sub((
@@ -22,7 +23,7 @@ def clean_identifier(text, default='identifier'):
     ), "", text)
 
     if not cleaned:
-        logger.warning("Stripped all characters from identifier '%s'")
+        logger.warning("Stripped all characters from identifier '%s'", text)
         cleaned = default
 
     if not cleaned.isidentifier():
@@ -32,31 +33,31 @@ def clean_identifier(text, default='identifier'):
     return cleaned
 
 
-def quote_string(text):
+def quote_string(text: Any) -> str:
     """Double "quotes" text"""
     # Escape back slashes and double quotes
-    text = re.sub(r'()(?=\\|")', r"\\", str(text))
+    text_str = re.sub(r'()(?=\\|")', r"\\", str(text))
 
     # Escape newlines
-    text = '\\n'.join(text.splitlines())
+    text_str = '\\n'.join(text_str.splitlines())
 
     # Double quote the string
-    return '"' + text + '"'
+    return '"' + text_str + '"'
 
 
-def quote_field(text):
+def quote_field(text: Any) -> str:
     """Single 'quotes' text"""
     # Escape back slashes and single quotes
-    text = re.sub(r"()(?=\\|')", r"\\", str(text))
+    text_str = re.sub(r"()(?=\\|')", r"\\", str(text))
 
     # Escape newlines
-    text = '\\n'.join(text.splitlines())
+    text_str = '\\n'.join(text_str.splitlines())
 
     # Single quote the string
-    return "'" + text + "'"
+    return "'" + text_str + "'"
 
 
-def quote_number(text):
+def quote_number(text: Any) -> str:
     """
     Does not quote valid ints, but
     does quote everything else.
@@ -64,53 +65,47 @@ def quote_number(text):
     Used to sanitize a value which may contain
     a large int which doesn't need quotes
     """
+    text_str = str(text)
     try:
-        if str(int(str(text))) == str(text):
-            return str(text)
+        if str(int(text_str)) == text_str:
+            return text_str
         return quote_string(text)
     except ValueError:
         try:
-            if str(float(str(text))) == str(text):
-                int(float(str(text)))
-                return str(text)
+            if str(float(text_str)) == text_str:
+                int(float(text_str))
+                return text_str
             return quote_string(text)
-        except ValueError:
-            return quote_string(text)
-        except OverflowError:
+        except (ValueError, OverflowError):
             return quote_string(text)
 
 
-def cast_number(value, default=0):
+def cast_number(value: Any, default: Union[int, float] = 0) -> Union[int, float]:
     """Casts a value to a number"""
     # Get number or return default
     try:
-        value = float(value)
+        num_value = float(value)
 
-        if value.is_integer():
-            return int(value)
-        if math.isnan(value):
+        if num_value.is_integer():
+            return int(num_value)
+        if math.isnan(num_value):
             return default
 
-        return value
+        return num_value
 
-    except ValueError:
+    except (ValueError, TypeError):
         try:
-            return int(value, base=0)
-        except ValueError:
+            return int(str(value), base=0)
+        except (ValueError, TypeError):
             return default
 
-    except TypeError:
-        # value == None
-        # TODO Check number casts when value == None
-        return default
 
-
-def valid_md5ext(md5ext):
+def valid_md5ext(md5ext: str) -> bool:
     """Verifies a md5ext path is valid"""
     return re.fullmatch(r"[a-z0-9]{32}\.[a-z3]{3}", md5ext) is not None
 
 
-def strip_pcodes(text):
+def strip_pcodes(text: str) -> str:
     """Strips % format codes from a proccode"""
     return re.sub(
         r"(?<!\\)%[sbn]",
@@ -118,7 +113,7 @@ def strip_pcodes(text):
     )
 
 
-def cast_literal(value, to_type):
+def cast_literal(value: Any, to_type: str) -> str:
     """
     Casts a value to a type
     Always returns a string
@@ -150,7 +145,7 @@ def cast_literal(value, to_type):
     return str(quote_number(value))
 
 
-def cast_wrapper(value, from_type, to_type):
+def cast_wrapper(value: str, from_type: str, to_type: str) -> str:
     """Puts a runtime cast wrapper around code"""
 
     # assert from_type in ('any', 'stack', 'int', 'float', 'str', 'bool', 'none')

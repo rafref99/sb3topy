@@ -94,6 +94,10 @@ class Project:
     def __getitem__(self, key):
         return self.json[key]
 
+    def get(self, key, default=None):
+        """Return a project.json value, matching dict.get."""
+        return self.json.get(key, default)
+
 
 class Manifest:
     """
@@ -121,7 +125,7 @@ class Manifest:
         # Create the assets folder if one doesn't exist
         assets_dir = path.join(self.output_dir, "assets")
         if not path.isdir(assets_dir):
-            os.mkdir(assets_dir)
+            os.makedirs(assets_dir)
 
 
 def save_json(project: Project, manifest: Manifest, pretty=False):

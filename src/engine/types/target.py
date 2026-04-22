@@ -18,6 +18,8 @@ import time
 import types
 from functools import wraps
 from itertools import zip_longest
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Optional, Tuple, Union
+from typing import List as PyList
 
 import pygame as pg
 from pygame.sprite import DirtySprite
@@ -27,6 +29,9 @@ from .costumes import Costumes
 from .lists import List
 from .pen import Pen
 from .sounds import Sounds
+
+if TYPE_CHECKING:
+    from ..util import Util
 
 
 class Target:
@@ -72,16 +77,25 @@ class Target:
     """
 
     # Clones for all sprites
-    _clones = []
+    _clones: PyList['Target'] = []
 
     # Type hints
     pen: Pen
     costume: Costumes
     sounds: Sounds
+    sprite: DirtySprite
+    dirty: bool
+    warp: 'Warp'
+    is_clone: bool
+    _events: Dict[str, PyList[Callable]]
+    _tasks: Dict[str, PyList[Any]]
+    _xpos: float
+    _ypos: float
+    _direction: float
 
     def __init_subclass__(cls):
         # Initialize the _bound_events dict
-        cls._bound_events = {}
+        cls._bound_events: Dict[str, str] = {}
         for func_name, func in cls.__dict__.items():
             # Check if the function has an event attriute
             event = getattr(func, 'event', None)
@@ -91,9 +105,9 @@ class Target:
                 cls._bound_events[func_name] = event
 
         # Create the clones list
-        cls.clones = []
+        cls.clones: PyList['Target'] = []
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional['Target'] = None):
         # Initialize the events dict
         self._events = {}
         for name, event in self._bound_events.items():
@@ -108,7 +122,7 @@ class Target:
 
         # Create the pygame sprite
         self.sprite = DirtySprite()
-        self.sprite.target = self
+        setattr(self.sprite, 'target', self)
 
         # Set dirty
         self.dirty = True
@@ -135,12 +149,12 @@ class Target:
             self.sounds = parent.sounds.copy()
 
     @property
-    def xpos(self):
+    def xpos(self) -> float:
         """Current x coordinate on the stage"""
         return self._xpos
 
     @xpos.setter
-    def xpos(self, xpos):
+    def xpos(self, xpos: float):
         self._xpos = max(-9e4, min(9e4, xpos))
 
         # Set dirty, move pen
@@ -150,12 +164,12 @@ class Target:
         self.pen.move(self._xpos, self._ypos)
 
     @property
-    def ypos(self):
+    def ypos(self) -> float:
         """Current y coordinate on the stage"""
         return self._ypos
 
     @ypos.setter
-    def ypos(self, ypos):
+    def ypos(self, ypos: float):
         self._ypos = max(-9e4, min(9e4, ypos))
 
         # Set dirty, move pen
@@ -165,12 +179,12 @@ class Target:
         self.pen.move(self._xpos, self._ypos)
 
     @property
-    def direction(self):
+    def direction(self) -> float:
         """Current angle on the stage"""
         return self._direction
 
     @direction.setter
-    def direction(self, degrees):
+    def direction(self, degrees: float):
         """Sets and wraps the direction"""
         # Wrap the new direction
         self._direction = degrees - ((degrees + 179) // 360) * 360
@@ -180,9 +194,9 @@ class Target:
         if self.sprite.visible:
             Costumes.redraw_requested = True
 
-    def move(self, steps):
+    def move(self, steps: float):
         """Moves steps in the current direction"""
-        radians = math.radians(90-self._direction)
+        radians = math.radians(90 - self._direction)
         self._xpos += steps * math.cos(radians)
         self._ypos += steps * math.sin(radians)
 
@@ -192,7 +206,7 @@ class Target:
             Costumes.redraw_requested = True
         self.pen.move(self._xpos, self._ypos)
 
-    def gotoxy(self, xpos, ypos):
+    def gotoxy(self, xpos: float, ypos: float):
         """Set xpos and ypos simultaneously"""
         self._xpos = xpos
         self._ypos = ypos
@@ -203,10 +217,10 @@ class Target:
             Costumes.redraw_requested = True
         self.pen.move(self._xpos, self._ypos)
 
-    def goto(self, util, other):
+    def goto(self, util: 'Util', other: Any):
         """Goto the position of another sprite"""
         target_xy = self._get_target_xy(util, other)
-        if other:
+        if target_xy:
             self._xpos = target_xy[0]
             self._ypos = target_xy[1]
 
@@ -216,16 +230,16 @@ class Target:
             Costumes.redraw_requested = True
         self.pen.move(self._xpos, self._ypos)
 
-    def point_towards(self, util, other):
+    def point_towards(self, util: 'Util', other: Any):
         """Point towards another sprite"""
         # Get the position of other
         if other == "_mouse_":
-            xpos = util.inputs.mouse_x
-            ypos = util.inputs.mouse_y
+            xpos = float(util.inputs.mouse_x)
+            ypos = float(util.inputs.mouse_y)
         else:
-            other = util.sprites.targets.get(other, self)
-            xpos = other.xpos
-            ypos = other.ypos
+            other_target = util.sprites.targets.get(other, self)
+            xpos = float(other_target.xpos)
+            ypos = float(other_target.ypos)
 
         # Calculate the angle to point in
         xpos -= self.xpos
@@ -237,16 +251,16 @@ class Target:
         if self.sprite.visible:
             Costumes.redraw_requested = True
 
-    async def glide(self, duration, endx, endy):
+    async def glide(self, duration: float, endx: float, endy: float):
         """Glides to a position"""
         start_time = time.monotonic()
-        elapsed = 0
+        elapsed = 0.0
         startx, starty = self.xpos, self.ypos
         while elapsed < duration:
             elapsed = time.monotonic() - start_time
             frac = elapsed / duration
-            self.xpos = startx + frac*(endx - startx)
-            self.ypos = starty + frac*(endy - starty)
+            self.xpos = startx + frac * (endx - startx)
+            self.ypos = starty + frac * (endy - starty)
 
             # Set dirty, move pen
             self.dirty = True
@@ -258,18 +272,18 @@ class Target:
         self.xpos = endx
         self.ypos = endy
 
-    async def glideto(self, util, duration, other):
+    async def glideto(self, util: 'Util', duration: float, other: Any):
         """Glides to the position of another sprite"""
         target_xy = self._get_target_xy(util, other)
         if target_xy:
             await self.glide(duration, target_xy[0], target_xy[1])
 
-    def _get_target_xy(self, util, other):
+    def _get_target_xy(self, util: 'Util', other: Any) -> Optional[Tuple[float, float]]:
         """Gets the xy coordinates of another sprite."""
         if other == "_mouse_":
-            return (util.inputs.mouse_x, util.inputs.mouse_y)
+            return (float(util.inputs.mouse_x), float(util.inputs.mouse_y))
 
-        elif other == "_random_":
+        if other == "_random_":
             return (
                 config.STAGE_SIZE[0] * (random.random() - 0.5),
                 config.STAGE_SIZE[1] * (random.random() - 0.5),
@@ -286,12 +300,12 @@ class Target:
         # TODO Bounce on edge
 
     @property
-    def rotation_style(self):
+    def rotation_style(self) -> str:
         """The rotation style of the sprite"""
         return self.costume.rotation_style
 
     @rotation_style.setter
-    def rotation_style(self, style):
+    def rotation_style(self, style: str):
         if style in ('all around', 'left-right', "don't rotate"):
             self.costume.rotation_style = style
 
@@ -301,12 +315,12 @@ class Target:
             Costumes.redraw_requested = True
 
     @property
-    def size(self):
+    def size(self) -> float:
         """Current sprite size"""
         return self.costume.size
 
     @size.setter
-    def size(self, value):
+    def size(self, value: float):
         self.costume._set_size(value)
 
         # Set dirty
@@ -314,38 +328,38 @@ class Target:
         if self.sprite.visible:
             Costumes.redraw_requested = True
 
-    def distance_to(self, util, other):
+    def distance_to(self, util: 'Util', other: Any) -> float:
         """Calculate the distance to another target"""
         if other == "_mouse_":
-            xpos = util.inputs.mouse_x
-            ypos = util.inputs.mouse_y
+            xpos = float(util.inputs.mouse_x)
+            ypos = float(util.inputs.mouse_y)
         else:
-            other = util.sprites.targets.get(other, self)
-            xpos = other.xpos
-            ypos = other.ypos
+            other_target = util.sprites.targets.get(other, self)
+            xpos = float(other_target.xpos)
+            ypos = float(other_target.ypos)
         return math.sqrt((self.xpos - xpos)**2 + (self.ypos - ypos)**2)
 
-    def distance_to_point(self, point):
+    def distance_to_point(self, point: Tuple[float, float]) -> float:
         """"Calculate the distance to a point (x, y)"""
         return math.sqrt((self.xpos - point[0])**2 + (self.ypos - point[1])**2)
 
     @property
-    def shown(self):
+    def shown(self) -> bool:
         """Whether the sprite is currently visible"""
         # Getter not actually used
         return self.sprite.visible
 
     @shown.setter
-    def shown(self, value):
+    def shown(self, value: bool):
         self.sprite.visible = value
 
         # Update dirty
         # sprite.dirty is set by the visible property
         Costumes.redraw_requested = True
 
-    def start_event(self, util, name, restart=True):
+    def start_event(self, util: 'Util', name: str, restart: bool = True) -> PyList[asyncio.Task]:
         """Starts and returns a list of tasks"""
-        tasks = []
+        tasks: PyList[asyncio.Task] = []
         for cor, task in zip_longest(self._events.get(name, []),
                                      self._tasks.get(name, [])):
             # Either restart the task or skip it
@@ -361,7 +375,8 @@ class Target:
             # may require a custom event loop.
 
             # Start the task
-            tasks.append(asyncio.create_task(cor(util)))
+            if cor is not None:
+                tasks.append(asyncio.create_task(cor(util)))
 
         self._tasks[name] = tasks
         return tasks
@@ -369,7 +384,7 @@ class Target:
     def stop_other(self):
         """Stop scripts other than the current"""
         this_task = asyncio.current_task()
-        this_name = None
+        this_name: Optional[str] = None
 
         for name in self._tasks:
             for task in self._tasks[name]:
@@ -380,9 +395,10 @@ class Target:
             self._tasks[name] = []
         if this_name is None:
             print("Failed to find running task for stop other.")
-        self._tasks[this_name] = [this_task]
+        else:
+            self._tasks[this_name] = [this_task] if this_task else []
 
-    def update(self, display, create_mask=False):
+    def update(self, display: Any, create_mask: bool = False):
         """Clears dirty flags by updating the rect and image"""
         # Update the image and rect, if necessary
         if self.costume.dirty:
@@ -401,7 +417,7 @@ class Target:
         if create_mask and not self.sprite.mask:
             self.sprite.mask = self.costume.get_mask()
 
-    def _update_image(self, display):
+    def _update_image(self, display: Any):
         """Updates and transforms the sprites image"""
         # Update the image
         image = self.costume.get_image(display, self.direction)
@@ -411,21 +427,21 @@ class Target:
         # The rect now needs updating
         self._update_rect(display)
 
-    def _update_rect(self, display):
+    def _update_rect(self, display: Any):
         """Updates the rect to match the sprite's position and orientation"""
         # Rotate the rect properly
-        offset = self.costume.costume['offset'] * self.costume.size/100
-        offset = offset.rotate(self.direction-90)
+        costume = self.costume
+        offset = costume.costume['offset'] * (costume.size / 100)
+        offset = offset.rotate(self._direction - 90)
+
+        sw, sh = config.STAGE_SIZE
         self.sprite.rect = self.sprite.image.get_rect(
-            center=display.scale*(offset + pg.math.Vector2(
-                self.xpos + config.STAGE_SIZE[0]//2,
-                config.STAGE_SIZE[1]//2 - self.ypos)))
+            center=display.scale * (offset + pg.math.Vector2(
+                self._xpos + sw // 2,
+                sh // 2 - self._ypos)))
 
         # Move the rect by the stage offset
         self.sprite.rect.move_ip(*display.rect.topleft)
-
-        # TODO Stage position restrictions
-        # self.sprite.rect.clamp(display.rect)
 
         self.sprite.dirty = 1
 
@@ -436,7 +452,7 @@ class Target:
         # Note, this will be overriden by Warp
         yield
 
-    async def sleep(self, delay):
+    async def sleep(self, delay: float):
         """Yields for at least 1 tick and delay"""
         # Force screen refresh before running again
         Costumes.redraw_requested = True
@@ -444,7 +460,7 @@ class Target:
         # Sleep the correct amount of time
         await asyncio.sleep(delay)
 
-    def get_touching(self, util, other):
+    def get_touching(self, util: 'Util', other: Any) -> bool:
         """Check if this sprite is touching another or its clones"""
         if other == "_mouse_":
             self.update(util.display, True)
@@ -454,23 +470,23 @@ class Target:
             offset = (xpos - offset[0], ypos - offset[1])
             try:
                 return bool(self.sprite.mask.get_at(offset))
-            except IndexError:
+            except (IndexError, AttributeError):
                 return False
 
-        other = util.sprites.targets.get(other)
-        if not other:
+        other_target = util.sprites.targets.get(other)
+        if not other_target:
             return False
 
         # Must update this sprite and the other before testing
         self.update(util.display, True)
-        other.update(util.display, True)
+        other_target.update(util.display, True)
 
         # Check if touching the original
-        if pg.sprite.collide_mask(other.sprite, self.sprite):
+        if pg.sprite.collide_mask(other_target.sprite, self.sprite):
             return True
 
         # Check if touching a clone
-        for clone in other.clones:
+        for clone in other_target.clones:
             # Update the clones image too
             clone.update(util.display, True)
 
@@ -479,7 +495,7 @@ class Target:
                 return True
         return False
 
-    def change_layer(self, util, value):
+    def change_layer(self, util: 'Util', value: int):
         """Moves number layers fowards"""
         group = util.sprites.group
         start = group.get_layer_of_sprite(self.sprite)
@@ -492,7 +508,7 @@ class Target:
         if self.sprite.visible:
             Costumes.redraw_requested = True
 
-    def front_layer(self, util):
+    def front_layer(self, util: 'Util'):
         """Moves the sprite to the front layer"""
         group = util.sprites.group
         start = group.get_layer_of_sprite(self.sprite)
@@ -504,7 +520,7 @@ class Target:
         if self.sprite.visible:
             Costumes.redraw_requested = True
 
-    def back_layer(self, util):
+    def back_layer(self, util: 'Util'):
         """Moves the sprite to the back layer"""
         group = util.sprites.group
         start = group.get_layer_of_sprite(self.sprite)
@@ -515,16 +531,16 @@ class Target:
             Costumes.redraw_requested = True
 
     @staticmethod
-    def _move_layers(group, start, value):
+    def _move_layers(group: Any, start: int, value: int):
         """Used to switch sprite layers around"""
-        sign = math.copysign(1, value)
+        sign = int(math.copysign(1, value))
         for i in range(int(abs(value))):
             group.switch_layer(
-                start + i*sign,
-                start + i*sign + sign
+                start + i * sign,
+                start + i * sign + sign
             )
 
-    def create_clone_of(self, util, name):
+    def create_clone_of(self, util: 'Util', name: str):
         """Create a clone of this target"""
         if len(self._clones) < config.MAX_CLONES:
             # Get the target to clone
@@ -542,8 +558,8 @@ class Target:
             top = group.get_top_layer()
             bottom = group.get_layer_of_sprite(self.sprite)
             top_sprite = group.get_top_sprite()
-            self._move_layers(group, top, bottom-top)
-            group.change_layer(top_sprite, top+1)
+            self._move_layers(group, top, bottom - top)
+            group.change_layer(top_sprite, top + 1)
 
             # __class__ is the Sprite's subclass
             clone = target.__class__(target)
@@ -554,7 +570,7 @@ class Target:
         else:
             print("Max clones!")
 
-    def delete_clone(self, util):
+    def delete_clone(self, util: 'Util'):
         """Delete this clone, will not delete original"""
         if self.is_clone:
             self._clones.remove(self)
@@ -599,20 +615,20 @@ async def _no_yield():
 class Warp:
     """Context manager to handle warp for a Target"""
 
-    __slots__ = ('_target', '_warp')
+    __slots__ = ('_target', '_warp', 'timer')
 
     def __init__(self, target):
         self._target = target
         self._warp = 0
-        # self.timer = time.monotonic()
+        self.timer = time.monotonic()
 
     def __bool__(self):
         return bool(self._warp)
 
     def __enter__(self):
         if not self._warp:
-            # self.timer = time.monotonic()
-            self._target.yield_ = _no_yield
+            self.timer = time.monotonic()
+            self._target.yield_ = self._warp_yield
         self._warp += 1
 
     def __exit__(self, _, _1, _2):
@@ -620,8 +636,8 @@ class Warp:
         if not self._warp:
             self._target.yield_ = _do_yield
 
-    # def _warp_yield(self):
-    #     """Checks the warp timer before yielding"""
-    #     if time.monotonic() - self.timer > config.WARP_TIME:
-    #         yield
-    #         self.timer = time.monotonic()
+    async def _warp_yield(self):
+        """Checks the warp timer before yielding"""
+        if time.monotonic() - self.timer > config.WARP_TIME:
+            await _do_yield()
+            self.timer = time.monotonic()

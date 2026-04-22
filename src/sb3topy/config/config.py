@@ -167,6 +167,9 @@ def parse_args(args=None):
     parser.add_argument("-r", dest="AUTORUN", action="store_true",
                         help="automatically runs the project when done")
 
+    if args and args[0] == parser.prog:
+        args = args[1:]
+
     # Parse arguments
     args = parser.parse_args(args)
 

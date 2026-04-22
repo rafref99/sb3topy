@@ -6,14 +6,15 @@ Used to store and generate code snippets
 
 import logging
 import re
-from textwrap import indent
+from textwrap import indent, indent as indent_text
+from typing import Any, Dict, List, Optional
 
 from .. import sanitizer, targets
 
 logger = logging.getLogger(__name__)
 
 
-def create_header(target: targets.Target):
+def create_header(target: targets.Target) -> str:
     """Creates code between "class ...:" and "def __init__" """
 
     comment = '"""Sprite ' + \
@@ -22,28 +23,39 @@ def create_header(target: targets.Target):
     return comment
 
 
-def file_header():
+def file_header() -> str:
     """Primarily contain imports for the file"""
     return (
         "import math\n"
         "import time\n\n"
         "import engine\n"
         "from engine.events import *\n"
+        "from engine.monitors import Monitor, ListMonitor\n"
         "from engine.operators import *\n"
         "from engine.types import *"
     )
 
 
-def file_footer():
+def file_footer(monitors_code="") -> str:
     """Creates the code at the end to run the program"""
     # Create an if __name__ == '__main__' statement
+    if monitors_code:
+        monitors_code = (
+            "def setup_monitors(SPRITES):\n"
+            f"{indent_text(monitors_code, '    ')}\n"
+        )
+        setup_arg = "setup_monitors"
+    else:
+        setup_arg = ""
+
     return (
+        "{monitors_code}\n\n"
         "if __name__ == '__main__':\n"
-        "    engine.start_program()"
-    )
+        "    engine.start_program({setup_arg})"
+    ).format(monitors_code=monitors_code, setup_arg=setup_arg)
 
 
-def create_init(target, manifest):
+def create_init(target: targets.Target, manifest: Any) -> str:
     """Creates Python __init__ code for a target dict"""
     info = (
         "self._xpos = {xpos}\n"
@@ -79,7 +91,7 @@ def create_init(target, manifest):
     )
 
 
-def target_class(code, name, clean_name):
+def target_class(code: str, name: str, clean_name: str) -> str:
     """Creates the class code for a Target"""
     return (
         "@sprite({name})\n"
@@ -92,7 +104,7 @@ def target_class(code, name, clean_name):
     )
 
 
-def parse_costumes(target, assets):
+def parse_costumes(target: targets.Target, assets: Dict[str, str]) -> str:
     """Creates code to init costumes for a target"""
     costumes = []
 
@@ -148,7 +160,7 @@ def parse_costumes(target, assets):
     )
 
 
-def parse_sounds(target: targets.Target, assets):
+def parse_sounds(target: targets.Target, assets: Dict[str, str]) -> str:
     """Creates code to init sounds for a target"""
     sounds = []
 
@@ -185,7 +197,7 @@ def parse_sounds(target: targets.Target, assets):
     )
 
 
-def parse_variables(target: targets.Target):
+def parse_variables(target: targets.Target) -> str:
     """Creates code to init variables for a target and clones"""
     vars_init = []
 
@@ -208,7 +220,7 @@ def parse_variables(target: targets.Target):
     return '\n'.join(vars_init).rstrip()
 
 
-def parse_lists(target: targets.Target):
+def parse_lists(target: targets.Target) -> str:
     """Creates code to init lists for a target and clones"""
     list_init = []
 
@@ -245,6 +257,69 @@ def parse_lists(target: targets.Target):
     return "\n".join(list_init).rstrip()
 
 
-def yield_():
+def parse_monitors(monitors: List[Dict[str, Any]], targets: targets.Targets) -> str:
+    """Creates code to initialize variable and list monitors"""
+    monitor_init = []
+
+    for monitor in monitors:
+        # Get the target name
+        target_name = monitor.get('target', 'Stage')
+        if not target_name:
+            target_name = 'Stage'
+        
+        target = targets.get(target_name)
+        if not target:
+            continue
+            
+        clean_target = "SPRITES.stage" if target_name == 'Stage' else f"SPRITES[{sanitizer.quote_string(target_name)}]"
+        
+        if monitor['mode'] == 'list':
+            if 'LIST' not in monitor['params']:
+                logger.warning("Skipping unsupported list monitor '%s'",
+                               monitor.get('id'))
+                continue
+
+            # List monitor
+            var = target.vars.get_var('list', monitor['params']['LIST'])
+            monitor_init.append((
+                "SPRITES.monitors.append(ListMonitor(\n"
+                "    {name}, {target}, {varname},\n"
+                "    {x}, {y}, {width}, {height}, {visible}\n"
+                "))"
+            ).format(
+                name=sanitizer.quote_string(monitor['params']['LIST']),
+                target=clean_target,
+                varname=sanitizer.quote_string(var.clean_name),
+                x=monitor['x'],
+                y=monitor['y'],
+                width=monitor['width'],
+                height=monitor['height'],
+                visible=monitor['visible']
+            ))
+        elif 'VARIABLE' in monitor['params']:
+            # Variable monitor
+            var = target.vars.get_var('var', monitor['params']['VARIABLE'])
+            monitor_init.append((
+                "SPRITES.monitors.append(Monitor(\n"
+                "    {name}, {target}, {varname},\n"
+                "    {x}, {y}, {visible}, {mode}\n"
+                "))"
+            ).format(
+                name=sanitizer.quote_string(monitor['params']['VARIABLE']),
+                target=clean_target,
+                varname=sanitizer.quote_string(var.clean_name),
+                x=monitor['x'],
+                y=monitor['y'],
+                visible=monitor['visible'],
+                mode=sanitizer.quote_string(monitor['mode'])
+            ))
+        else:
+            logger.warning("Skipping unsupported monitor '%s' with opcode '%s'",
+                           monitor.get('id'), monitor.get('opcode'))
+
+    return "\n".join(monitor_init)
+
+
+def yield_() -> str:
     """Returns the code for a yield"""
     return "await self.yield_()"

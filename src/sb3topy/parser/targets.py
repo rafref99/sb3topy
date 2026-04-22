@@ -7,7 +7,7 @@ TODO Consider adding a cache to get_parent_hat
 """
 
 import logging
-from typing import Dict
+from typing import Dict, List, Optional, Set, Any, Iterable, Tuple
 
 from . import naming, specmap
 from .prototypes import Prototypes
@@ -27,10 +27,10 @@ class Targets:
 
     def __init__(self):
         self.names = naming.Sprites()
-        self.targets: Dict[str, Target] = {}
+        self.targets: Dict[str, 'Target'] = {}
         self.digraph = DiGraph()
 
-    def add_targets(self, targets):
+    def add_targets(self, targets: Iterable[Dict[str, Any]]):
         """Creates and adds each target to the internal dict"""
         Target.digraph = self.digraph
 
@@ -41,18 +41,18 @@ class Targets:
                 self.names.create_identifier(target['name'])
             )
 
-    def name_items(self):
+    def name_items(self) -> Iterable[Tuple[str, str]]:
         """Returns name items (original, cleaned)"""
         return self.names.sprites.dict.items()
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Optional['Target'] = None) -> Optional['Target']:
         """Gets an item from the internal dict"""
         return self.targets.get(key, default)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> 'Target':
         return self.targets[key]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable['Target']:
         return iter(self.targets.values())
 
 
@@ -94,21 +94,21 @@ class Target:
     """
 
     digraph: DiGraph
-    broadcasts = {}
-    cloned_targets = set()
+    broadcasts: Dict[str, Optional[str]] = {}
+    cloned_targets: Set[str] = set()
 
-    def __init__(self, target, name):
+    def __init__(self, target: Dict[str, Any], name: str):
         self.target = target
         self.clean_name = name
-        self.blocks: Dict[str, dict] = target['blocks']
-        self.hats = []
+        self.blocks: Dict[str, Any] = target['blocks']
+        self.hats: List[Tuple[str, Dict[str, Any]]] = []
 
         self.vars = Variables(name, target['isStage'])
 
         self.events = naming.Events()
         self.prototypes = Prototypes(self.events)
 
-        self.prototype = None
+        self.prototype: Optional[Prototypes] = None
 
     def first_pass(self):
         """
@@ -191,21 +191,21 @@ class Target:
             elif opcode in ('data_itemnumoflist', 'data_listcontainsitem'):
                 self.vars.mark_indexed(block)
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Any = None) -> Any:
         """Gets an item from the internal dict"""
         return self.target.get(key, default)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self.target[key]
 
-    def add_broadcast(self, broadcast):
+    def add_broadcast(self, broadcast: str):
         """Keeps track of which broadcasts only have a single reciever"""
         if broadcast in self.broadcasts:
             self.broadcasts[broadcast] = None
         else:
             self.broadcasts[broadcast] = self.target['name']
 
-    def get_parent_hat(self, block: dict):
+    def get_parent_hat(self, block: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
         Returns the hat block the passed block is a child of or None if
         the block is part of a stack without a hat.
@@ -213,6 +213,6 @@ class Target:
         while block:
             if specmap.is_hat(block):
                 break
-            block = self.blocks.get(block['parent'])
-
+            block = self.blocks.get(block.get('parent')) # type: ignore
+        
         return block

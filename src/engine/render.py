@@ -116,6 +116,7 @@ class Render:
     def __init__(self, sprites):
         self.group = sprites.group
         self.stage = sprites.stage.sprite
+        self.monitors = sprites.monitors
         self.group.set_timing_treshold(config.FLIP_THRESHOLD)
 
         self.rects = []
@@ -158,6 +159,18 @@ class Render:
 
         # Draw the sprites
         self.rects.extend(self.group.draw(display.screen))
+
+        # Draw the monitors
+        self.draw_monitors(display)
+
+    def draw_monitors(self, display):
+        """Draws all visible monitors"""
+        for monitor in self.monitors:
+            if monitor.visible:
+                # Add monitor rect to dirty rects
+                self.group.repaint_rect(monitor.rect)
+                self.rects.append(monitor.rect)
+                display.screen.blit(monitor.image, monitor.rect)
 
     def draw_fps(self, display, clock):
         """Draws fps to the screen"""

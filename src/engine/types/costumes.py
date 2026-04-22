@@ -5,8 +5,12 @@ Contains the Costumes class and helper functions
 """
 
 import pygame as pg
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from ..config import STAGE_SIZE
+
+if TYPE_CHECKING:
+    pass
 
 __all__ = ['Costumes']
 
@@ -41,27 +45,28 @@ class Costumes:
         _cache - A shared cache containing loaded images
     """
 
-    redraw_requested = False
-    _cache = {}
+    redraw_requested: bool = False
+    _cache: Dict[str, pg.Surface] = {}
 
-    def __init__(self, costume_number, size,
-                 rotation_style, costumes, copy_dicts=None):
-        self.number = costume_number + 1
-        self.costume = costumes[costume_number]
-        self._size = size
-        self.rotation_style = rotation_style
+    def __init__(self, costume_number: int, size: float,
+                 rotation_style: str, costumes: List[Dict[str, Any]],
+                 copy_dicts: Optional[Tuple[Dict[str, Dict[str, Any]], Dict[str, float]]] = None):
+        self.number: int = costume_number + 1
+        self.costume: Dict[str, Any] = costumes[costume_number]
+        self._size: float = size
+        self.rotation_style: str = rotation_style
 
-        self.dirty = True
+        self.dirty: bool = True
 
-        self.costume_list = costumes
+        self.costume_list: List[Dict[str, Any]] = costumes
 
         # Last gotten image without effects
         # Used to get the sprite mask
-        self.last_image: pg.Surface = None
+        self.last_image: Optional[pg.Surface] = None
 
         if copy_dicts is None:
-            self.effects = {}
-            self.costumes = {}
+            self.effects: Dict[str, float] = {}
+            self.costumes: Dict[str, Dict[str, Any]] = {}
 
             # Initialize the costume lists
             for index, asset in enumerate(costumes):
@@ -82,14 +87,14 @@ class Costumes:
             self.costumes = copy_dicts[0]
             self.effects = copy_dicts[1]
 
-    def _load_image(self, path):
+    def _load_image(self, path: str) -> pg.Surface:
         """Loads an image or retrieves it from cache"""
         image = self._cache.get(path)
         if not image:
             try:
                 image = pg.image.load("assets/" + path).convert_alpha()
                 self._cache[path] = image
-            except pg.error as error:
+            except (pg.error, FileNotFoundError) as error:
                 print(
                     f"Failed to load '{path}'! Using a blank image instead. Details:",
                     error)
@@ -102,9 +107,9 @@ class Costumes:
 
         return image
 
-    def switch(self, costume):
+    def switch(self, costume: Union[str, float]):
         """Sets the costume"""
-        asset = self.costumes.get(costume)
+        asset = self.costumes.get(str(costume))
         if asset:
             self.costume = asset
             self.number = asset['number']
@@ -113,9 +118,7 @@ class Costumes:
                 self.number = (round(float(costume)) %
                                len(self.costume_list))
                 self.costume = self.costume_list[self.number - 1]
-            except ValueError:
-                pass
-            except OverflowError:
+            except (ValueError, TypeError, OverflowError):
                 pass
 
         # Set dirty
@@ -134,49 +137,51 @@ class Costumes:
         Costumes.redraw_requested = True
 
     @property
-    def size(self):
+    def size(self) -> float:
         """The current costume size"""
         return self._size
 
     @size.setter
-    def size(self, value):
+    def size(self, value: float):
         image = self.costume['image']
 
         cost_w = image.get_width() / self.costume['scale']
         cost_h = image.get_height() / self.costume['scale']
 
-        min_scale = min(1, max(5 / cost_w, 5 / cost_h))
+        min_scale = min(1.0, max(5.0 / cost_w, 5.0 / cost_h))
         max_scale = min(1.5 * STAGE_SIZE[0] / cost_w,
                         1.5 * STAGE_SIZE[1] / cost_h)
 
-        self._size = max(min_scale, min(max_scale, value/100)) * 100
+        self._size = max(min_scale, min(max_scale, value / 100.0)) * 100.0
 
         # Set dirty
         self.dirty = True
         Costumes.redraw_requested = True
 
     @property
-    def name(self):
+    def name(self) -> str:
         """The name of the current costume"""
         return self.costume['name']
 
-    def set_effect(self, effect, value):
+    def set_effect(self, effect: str, value: float):
         """Sets and wraps/clamps a graphics effect"""
+        effect = str(effect).lower()
         if effect == 'ghost':
-            self.effects[effect] = min(max(value, 0), 100)
+            self.effects[effect] = min(max(value, 0.0), 100.0)
         elif effect == 'brightness':
-            self.effects[effect] = min(max(value, -100), 100)
+            self.effects[effect] = min(max(value, -100.0), 100.0)
         elif effect == 'color':
-            self.effects[effect] = value % 200
+            self.effects[effect] = value % 200.0
 
         # Set dirty
         self.dirty = True
         Costumes.redraw_requested = True
 
-    def change_effect(self, effect, value):
+    def change_effect(self, effect: str, value: float):
         """Changes and wraps/clamps a graphics effect"""
-        value = self.effects.get(effect, 0) + value
-        self.set_effect(effect, value)
+        effect = str(effect).lower()
+        current_value = self.effects.get(effect, 0.0)
+        self.set_effect(effect, current_value + value)
 
     def clear_effects(self):
         """Clear all graphic effects"""
@@ -184,47 +189,47 @@ class Costumes:
 
         # Set dirty
         self.dirty = True
-        self.redraw_requested = True
+        Costumes.redraw_requested = True
 
-    def _apply_effects(self, image: pg.Surface):
+    def _apply_effects(self, image: pg.Surface) -> pg.Surface:
         """Apply current effects to an image"""
         # Brighten/Darken
-        brightness = self.effects.get('brightness', 0)
+        brightness = self.effects.get('brightness', 0.0)
         if brightness > 0:
-            brightness = 255 * brightness / 100
+            brightness_val = 255 * brightness / 100
             image.fill(
-                (brightness, brightness, brightness),
+                (brightness_val, brightness_val, brightness_val),
                 special_flags=pg.BLEND_RGB_ADD)
         elif brightness < 0:
-            brightness = -255 * brightness / 100
+            brightness_val = -255 * brightness / 100
             image.fill(
-                (brightness, brightness, brightness),
+                (brightness_val, brightness_val, brightness_val),
                 special_flags=pg.BLEND_RGB_SUB)
 
         # Transparency
-        ghost = self.effects.get('ghost', 0)
+        ghost = self.effects.get('ghost', 0.0)
         if ghost:
-            ghost = 255 - 255 * ghost / 100
+            ghost_val = 255 - 255 * ghost / 100
             image = image.copy()
             image.fill(
-                (255, 255, 255, ghost),
+                (255, 255, 255, ghost_val),
                 special_flags=pg.BLEND_RGBA_MULT)
 
         # Hue change
-        color = self.effects.get('color', 0)
+        color = self.effects.get('color', 0.0)
         if color:
-            color = 360 * color / 200
-            image = hue_effect(image, color)
+            color_val = 360 * color / 200
+            image = hue_effect(image, color_val)
 
         return image
 
-    def get_image(self, display, direction):
+    def get_image(self, display: Any, direction: float) -> pg.Surface:
         """Get the current image with a size and direction"""
         # Get the base image
         image = self.costume['image']
 
         # Scale the image
-        scale = self._size/100 / \
+        scale = self._size / 100.0 / \
             self.costume['scale'] * display.scale
         image = pg.transform.smoothscale(
             image, (min(9000, max(4, int(image.get_width() * scale))),
@@ -234,9 +239,9 @@ class Costumes:
         # Rotate the image
         if self.rotation_style == "all around":
             # Segmentation fault here if image size is too small
-            image = pg.transform.rotate(image, 90-direction)
+            image = pg.transform.rotate(image, 90.0 - direction)
         elif self.rotation_style == "left-right":
-            if direction > 0:
+            if direction < 0:
                 image = pg.transform.flip(image, True, False)
 
         # Save the image without effects
@@ -247,21 +252,21 @@ class Costumes:
 
         return image
 
-    def copy(self):
-        """Return a copy of this list"""
+    def copy(self) -> 'Costumes':
+        """Return a copy of this Costumes object"""
         cost = Costumes(self.number - 1, self._size,
                         self.rotation_style, self.costume_list,
                         (self.costumes, self.effects.copy()))
         return cost
 
-    def get_mask(self):
+    def get_mask(self) -> pg.mask.Mask:
         """
         Get a sprite mask using the last gotten image without effects
         """
         return pg.mask.from_surface(self.last_image)
 
 
-def hue_effect(src_image, value):
+def hue_effect(src_image: pg.Surface, value: float) -> pg.Surface:
     """
     Changes the hue of an image for the color effect.
 

@@ -8,6 +8,11 @@ functions primarily used in project.py.
 import asyncio
 import logging
 import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+if TYPE_CHECKING:
+    from .runtime import Runtime, Sprites
+    from .types import Target
 
 
 class Util:
@@ -31,29 +36,29 @@ class Util:
         counter: Used for the hidden counter blocks.
     """
 
-    def __init__(self, runtime):
+    def __init__(self, runtime: 'Runtime'):
         self.timer = Timer()
         self.inputs = runtime.inputs
         self.sprites = runtime.sprites
         self.display = runtime.display
         self.events = runtime.events
         self.runtime = runtime
-        self.answer = ""
-        self.counter = 0
+        self.answer: str = ""
+        self.counter: int = 0
 
-    def send_event(self, event, restart=False):
+    def send_event(self, event: str, restart: bool = False):
         """Send an event"""
         self.events.send(self, self.sprites, event, restart)
 
-    async def send_wait(self, event, restart=False):
+    async def send_wait(self, event: str, restart: bool = False):
         """Send an event"""
         await self.events.send_wait(self, self.sprites, event, restart)
 
-    def send_broadcast(self, event):
+    def send_broadcast(self, event: str):
         """Sends a broadcast"""
         return self.events.broadcast(self, self.sprites, event)
 
-    async def send_broadcast_wait(self, event):
+    async def send_broadcast_wait(self, event: str):
         """Sends a broadcast"""
         await self.events.broadcast_wait(self, self.sprites, event)
 
@@ -62,7 +67,7 @@ class Util:
         print("Stop")
         self.runtime.running = False
 
-    def ask(self, prompt):
+    def ask(self, prompt: str):
         """Asks for input on the console"""
         self.answer = input(prompt)
 
@@ -75,9 +80,9 @@ class Timer:
     """
 
     def __init__(self):
-        self._timer = time.monotonic()
+        self._timer: float = time.monotonic()
 
-    def __call__(self):
+    def __call__(self) -> float:
         return time.monotonic() - self._timer
 
     def reset(self):
@@ -95,9 +100,9 @@ class Events:
     """
 
     def __init__(self):
-        self.events = {}
+        self.events: Dict[str, asyncio.Task] = {}
 
-    def _send(self, util, sprites, event, restart):
+    def _send(self, util: 'Util', sprites: 'Sprites', event: str, restart: bool) -> asyncio.Task:
         """
         Creates a tasks for every couroutine tied to an event, and
         creates a parent task waiting for each of the child tasks to
@@ -120,10 +125,10 @@ class Events:
 
                 # Backwards compatibility hack
                 # Used instead of the Python 3.9 cancel msg
-                task.was_restarted = True
+                setattr(task, 'was_restarted', True)
 
         # Get a list of child tasks to runs
-        tasks = []
+        tasks: List[asyncio.Task] = []
         for sprite in sprites.sprites():
             tasks.extend(sprite.target.start_event(util, event, restart))
         tasks.extend(sprites.stage.start_event(util, event, restart))
@@ -133,11 +138,11 @@ class Events:
         self.events[event] = task
         return task
 
-    def send(self, util, sprites, event, restart=False):
+    def send(self, util: 'Util', sprites: 'Sprites', event: str, restart: bool = False):
         """Starts an event for all sprites. Cannot be awaited."""
         self._send(util, sprites, event, restart)
 
-    async def send_wait(self, util, sprites, event, restart):
+    async def send_wait(self, util: 'Util', sprites: 'Sprites', event: str, restart: bool):
         """Starts an event for all sprites. Should be awaited."""
         # Get the task
         task = self._send(util, sprites, event, restart)
@@ -150,12 +155,12 @@ class Events:
             if not hasattr(task, "was_restarted"):
                 raise
 
-    def send_to(self, util, target, event):
+    def send_to(self, util: 'Util', target: 'Target', event: str) -> asyncio.Task:
         """Starts an event for a single target"""
         tasks = target.start_event(util, event)
         return asyncio.create_task(self._handle_tasks(tasks))
 
-    async def _handle_tasks(self, tasks):
+    async def _handle_tasks(self, tasks: List[asyncio.Task]):
         """Waits on a list of tasks and catches any errors"""
         # Handle an empty list
         if not tasks:
@@ -173,12 +178,12 @@ class Events:
             except Exception:  # pylint: disable=broad-except
                 logging.exception("Error in gathered task '%s'", task)
 
-    def broadcast(self, util, sprites, event):
+    def broadcast(self, util: 'Util', sprites: 'Sprites', event: str):
         """Parses a broadcast name and sends it. Not awaitable."""
-        event = 'broadcast_' + event.lower()
-        self._send(util, sprites, event, True)
+        event_name = 'broadcast_' + event.lower()
+        self._send(util, sprites, event_name, True)
 
-    async def broadcast_wait(self, util, sprites, event):
+    async def broadcast_wait(self, util: 'Util', sprites: 'Sprites', event: str):
         """Parses a broadcast name and sends it. Awaitable."""
-        event = 'broadcast_' + event.lower()
-        await self.send_wait(util, sprites, event, True)
+        event_name = 'broadcast_' + event.lower()
+        await self.send_wait(util, sprites, event_name, True)

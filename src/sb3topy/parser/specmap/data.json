@@ -1220,6 +1220,34 @@
         },
         "code": "math.pow(10, {NUM})"
     },
+    "data_showvariable": {
+        "type": "stack",
+        "args": {
+            "VARIABLE": "variable"
+        },
+        "code": "util.runtime.sprites.monitors_show('var', {VARIABLE})"
+    },
+    "data_hidevariable": {
+        "type": "stack",
+        "args": {
+            "VARIABLE": "variable"
+        },
+        "code": "util.runtime.sprites.monitors_hide('var', {VARIABLE})"
+    },
+    "data_showlist": {
+        "type": "stack",
+        "args": {
+            "LIST": "list"
+        },
+        "code": "util.runtime.sprites.monitors_show('list', {LIST})"
+    },
+    "data_hidelist": {
+        "type": "stack",
+        "args": {
+            "LIST": "list"
+        },
+        "code": "util.runtime.sprites.monitors_hide('list', {LIST})"
+    },
     "data_variable": {
         "type": "any",
         "args": {

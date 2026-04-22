@@ -15,7 +15,7 @@ import pygame as pg
 from . import config
 from .events import SPRITES
 from .render import Display, Render
-from .types import Costumes, Pen
+from .types import Costumes, Pen, Sounds
 from .user_input import Inputs
 from .util import Events, Util
 
@@ -71,26 +71,50 @@ class Runtime:
         # Setup asyncio debug
         asyncio.get_running_loop().slow_callback_duration = 0.49
 
-        # Start green flag
-        self.events.send(self.util, self.sprites, "green_flag")
+        try:
+            # Start green flag
+            self.events.send(self.util, self.sprites, "green_flag")
 
-        # Main loop
-        self.running = True
-        while self.running:
-            # Handle the event queue
-            self.handle_events()
+            # Main loop
+            self.running = True
+            while self.running:
+                # Handle the event queue
+                self.handle_events()
 
-            # Allow threads to run
-            await self.step_threads()
+                # Allow threads to run
+                await self.step_threads()
 
-            # Update targets, draw screen
-            self.draw()
+                # Update targets, draw screen
+                self.draw()
 
-            # Limit the frame rate
-            if not config.TURBO_MODE:
-                self.clock.tick(config.TARGET_FPS)
-            else:
-                self.clock.tick()
+                # Limit the frame rate
+                if not config.TURBO_MODE:
+                    self.clock.tick(config.TARGET_FPS)
+                else:
+                    self.clock.tick()
+        finally:
+            await self.shutdown_tasks()
+
+    async def shutdown_tasks(self):
+        """Cancel all running Scratch tasks before shutting down pygame."""
+        tasks = []
+
+        tasks.extend(self.events.events.values())
+        self.events.events.clear()
+
+        for target in self.sprites.all_targets():
+            for target_tasks in target._tasks.values():
+                tasks.extend(target_tasks)
+            target._tasks.clear()
+
+        pending = [task for task in tasks if not task.done()]
+        for task in pending:
+            task.cancel()
+
+        Sounds.stop_all()
+
+        if pending:
+            await asyncio.sleep(0)
 
     def handle_events(self):
         """Handles the event queue"""
@@ -118,8 +142,10 @@ class Runtime:
         """Run threads for WORK_TIME"""
         dirty = False
         work_timer = time.monotonic()
-        while (time.monotonic() < work_timer + config.WORK_TIME) and \
-                (config.TURBO_MODE or not dirty):
+        work_end = work_timer + config.WORK_TIME
+        turbo = config.TURBO_MODE
+        
+        while (time.monotonic() < work_end) and (turbo or not dirty):
             # Allow targets to run for 1 tick
             await asyncio.sleep(0)
 
@@ -171,6 +197,7 @@ class Sprites:
         self.targets = {}
         self.group = pg.sprite.LayeredDirty()
         self.stage = None
+        self.monitors = []
 
         # Init Targets, loading assets
         for name, target in targets.items():
@@ -188,6 +215,14 @@ class Sprites:
         """Returns a iter of pygame sprites, top to bottom"""
         return reversed(self.group.sprites())
 
+    def all_targets(self):
+        """Yield stage, sprites, and clones."""
+        if self.stage is not None:
+            yield self.stage
+        for target in self.targets.values():
+            yield target
+            yield from target.clones
+
     def update(self, display):
         """Update all targets, including stage and clones"""
         for target in self.targets.values():
@@ -196,8 +231,27 @@ class Sprites:
                 clone.update(display)
         self.stage.update(display)
 
+        # Update monitors
+        for monitor in self.monitors:
+            monitor.update(display)
 
-def start_program():
+    def monitors_show(self, m_type, name):
+        """Shows a monitor"""
+        # Note: 'name' is the cleaned variable name
+        for monitor in self.monitors:
+            if monitor.varname == name:
+                monitor.visible = True
+                monitor.dirty = 2
+
+    def monitors_hide(self, m_type, name):
+        """Hides a monitor"""
+        for monitor in self.monitors:
+            if monitor.varname == name:
+                monitor.visible = False
+                monitor.dirty = 2
+
+
+def start_program(setup=None):
     """Run the program"""
     logging.basicConfig(level=logging.DEBUG)
 
@@ -205,9 +259,20 @@ def start_program():
         random.seed(config.RANDOM_SEED)
 
     runtime = None
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
         runtime = Runtime(SPRITES)
-        asyncio.run(runtime.main_loop())
+        if setup is not None:
+            setup(runtime.sprites)
+        loop.run_until_complete(runtime.main_loop())
     finally:
+        pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            loop.run_until_complete(asyncio.sleep(0))
+        loop.close()
+        asyncio.set_event_loop(None)
         if runtime:
             runtime.quit()

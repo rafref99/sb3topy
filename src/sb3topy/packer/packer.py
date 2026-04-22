@@ -7,12 +7,15 @@ Handles several tasks specific to saving files
 import logging
 import os
 import shutil
+import subprocess
 import sys
+import importlib
+from multiprocessing import current_process
 from os import path
 
 from .. import config, project
 
-__all__ = ('save_code', 'copy_engine', 'run_project')
+__all__ = ('save_code', 'copy_engine', 'run_project', 'launch_project')
 
 logger = logging.getLogger(__name__)
 
@@ -96,13 +99,68 @@ def run_project(output_dir):
     # pylint: disable=all
     logger.info("Running project...")
 
+    if current_process().name != "MainProcess":
+        return launch_project(output_dir)
+
     old_cwd = os.getcwd()
-    os.chdir(output_dir)
+    old_path = list(sys.path)
 
-    sys.path.insert(1, output_dir)
-    import project  # type:ignore
+    try:
+        os.chdir(output_dir)
+        sys.path.insert(0, output_dir)
 
-    project.engine.start_program()
+        # Generated projects and their copied engine are output-specific.
+        # Clear stale modules so repeated GUI runs do not reuse an older run.
+        for module_name in list(sys.modules):
+            if module_name == "project" or module_name == "engine" or module_name.startswith("engine."):
+                del sys.modules[module_name]
 
-    sys.path.pop(1)
-    os.chdir(old_cwd)
+        project_module = importlib.import_module("project")
+        project_module.engine.start_program(
+            getattr(project_module, "setup_monitors", None))
+
+    except ModuleNotFoundError as exc:
+        if exc.name == "pygame":
+            logger.error(
+                "Could not run project because pygame is not installed. "
+                "Install it for this interpreter with: %s -m pip install pygame",
+                sys.executable)
+            return False
+        raise
+
+    finally:
+        sys.path = old_path
+        os.chdir(old_cwd)
+
+    return True
+
+
+def launch_project(output_dir):
+    """
+    Starts project.py in its own Python process.
+
+    This is used by the GUI worker. On macOS, creating a Pygame/Cocoa
+    window from a multiprocessing worker can fail during display setup.
+    """
+    project_path = path.join(output_dir, "project.py")
+    if not path.isfile(project_path):
+        logger.error("Could not run project; '%s' does not exist.", project_path)
+        return False
+
+    env = os.environ.copy()
+    homebrew_lib = "/opt/homebrew/lib"
+    if path.isdir(homebrew_lib):
+        fallback_path = env.get("DYLD_FALLBACK_LIBRARY_PATH", "")
+        fallback_dirs = fallback_path.split(os.pathsep) if fallback_path else []
+        if homebrew_lib not in fallback_dirs:
+            fallback_dirs.insert(0, homebrew_lib)
+            env["DYLD_FALLBACK_LIBRARY_PATH"] = os.pathsep.join(fallback_dirs)
+
+    try:
+        subprocess.Popen([sys.executable, project_path], cwd=output_dir, env=env)
+    except OSError:
+        logger.exception("Failed to launch project using '%s'.", sys.executable)
+        return False
+
+    logger.info("Launched project in a separate process.")
+    return True

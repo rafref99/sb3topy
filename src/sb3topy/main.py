@@ -10,6 +10,7 @@ path to a configuration json can be passed as an argument.
 
 
 import logging
+import sys
 from multiprocessing import Process, Queue
 
 from . import config, packer, parser, pkg_log, project, unpacker
@@ -33,11 +34,10 @@ def main(args=None):
         # otherwise broken, the terminal interface should still work.
         from . import gui  # pylint: disable=import-outside-toplevel
 
-        gui.run_app()
+        return gui.run_app()
 
     # Run the conversion
-    else:
-        run()
+    return run()
 
 
 def run():
@@ -87,7 +87,8 @@ def run():
                     manifest.output_dir)
 
     if config.AUTORUN:
-        packer.run_project(manifest.output_dir)
+        if not packer.run_project(manifest.output_dir):
+            return False
 
     logger.info("Done!")
 
@@ -105,6 +106,7 @@ def _run_worker(queue, config_data):
         # Setup the log to use the queue
         pkg_log.config_logger()
         pkg_log.config_queue(queue)
+        logger.info("Using Python interpreter: %s", sys.executable)
 
         # Run the converter
         run()
@@ -115,6 +117,9 @@ def _run_worker(queue, config_data):
             "Unhandled exception during the conversion process:",
             exc_info=True)
         raise
+
+    finally:
+        queue.put(None)
 
     # Process now ends
 

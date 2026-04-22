@@ -1,6 +1,30 @@
-# sb3topy
+# sb3topy (Reworked)
+
+**Note: This is a reworked version of sb3topy featuring significant performance improvements, enhanced compatibility, and modernized code architecture.**
 
 sb3topy is a tool which can convert [Scratch 3.0](https://scratch.mit.edu) projects into Python. The project is converted into a single file which can run using the sb3topy engine and Pygame. The engine files are automatically copied when the converter is run.
+
+## AI-Assisted Rework
+This project is being significantly improved and modernized with the assistance of **Junie**, an autonomous programmer powered by the **gemini-3-flash-preview** LLM (2026). The AI has been instrumental in implementing type hints, modernizing the GUI with CustomTkinter, and optimizing the engine's core logic.
+
+## Key Improvements in this Rework
+- **Modernized Architecture:** Enhanced with type hints and a cleaner project structure.
+- **Improved Performance:** Optimized rendering and execution loop for smoother Scratch project playback.
+- **Enhanced Compatibility:** Ongoing work to support more blocks and Scratch extensions.
+- **Robust Testing:** Expanded test suite to ensure conversion accuracy.
+
+## Recent Reliability Fixes
+- The GUI Output tab now displays conversion logs and exception tracebacks while tasks run.
+- Manual conversion and example downloads now force a full conversion path, including engine copy and `project.py` generation.
+- Example downloads use a persistent `~/sb3topy_examples/` output folder when no output path is selected.
+- Download & Run reports missing `pygame` clearly, and generated projects run against their copied output `engine/` first.
+- GUI Download & Run launches generated projects in a separate Python process to avoid macOS Pygame display setup crashes from worker processes.
+- Generated projects initialize Scratch monitors after runtime sprite setup, avoiding startup crashes in Download & Run.
+- Generated projects cancel Scratch tasks and close the asyncio loop directly so the Pygame window can quit cleanly.
+- Homebrew Cairo is detected automatically on macOS so SVG costumes convert to PNGs instead of making Pygame load large SVGs at startup.
+- Output folders are created automatically when converting to a new directory.
+- CLI-style calls such as `main.main(["sb3topy", "project.sb3", "out"])` are supported for integration tests and tooling.
+- Unsupported Scratch monitor types are skipped with warnings instead of stopping project conversion.
 
 Currently, sb3topy is in Beta and may have bugs or missing features which could prevent some project from running correctly. In addition, there may be bugs which allow arbitrary Python code to run, so be cautious when running untrusted projects.
 
@@ -8,7 +32,7 @@ A full list of supported blocks can be found [here](docs/supported_blocks.md).
 
 ## Quickstart
 
-1. Using Python 3.7+, install the recommended packages (pygame, requests, and cairosvg) with pip. Note that some users may need to take additional steps to support SVG conversion (see Requirements).
+1. Using Python 3.12, install the required packages (`pygame`, `requests`, `customtkinter`, and optionally `cairosvg`) with pip.
 
    ```pip install -r requirements.txt```
 
@@ -18,19 +42,30 @@ A full list of supported blocks can be found [here](docs/supported_blocks.md).
 
 3. Pick an example and hit Download & Run.
 
+## Testing
+
+Run the test suite from the repository root with the local package on `PYTHONPATH`.
+
+```bash
+PYTHONPATH=src python3 -m pytest -q
+```
+
 ## Requirements
 
-Before using sb3topy, there are a few Python packages which you may need to install using [pip](https://pypi.org/project/pip/). The program should still work without any of these installed, but there may be reduced functionality. You can install each package individually, or you can install all packages at once using [requirements.txt](requirements.txt).
+Before using sb3topy, you need to install a few Python packages using [pip](https://pypi.org/project/pip/). You can install all of them at once using [requirements.txt](requirements.txt).
 
-| Package  | Description                                                                                                                    |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| pygame   | Used by the engine to run converted projects.                                                                                  |
-| requests | Used to download projects and example thumbnails in the GUI.                                                                   |
-| cairosvg | Used to convert SVG files, which are not supported by Pygame, into PNGs. It may be difficult to install this package on some systems. |
+| Package | Description | Mandatory |
+| :--- | :--- | :--- |
+| `pygame` | Used by the engine to run converted projects. | Yes |
+| `requests` | Used to download projects and example thumbnails. | Yes |
+| `customtkinter` | Used for the modern graphical user interface. | Yes |
+| `cairosvg` | Used to convert SVG files into PNGs. | Optional* |
+
+\* **Note on SVG Conversion:** `cairosvg` is optional but highly recommended if your Scratch project uses SVG costumes. If you don't want to install it, you can configure Inkscape as an alternative in the Assets tab of the GUI.
 
 Note that Pygame 2+ is required to play MP3 files. MP3 files can optionally be converted using VLC player. To enable MP3 conversion or convert using a custom command, see the assets tab of the GUI.
 
-Note that CairoSVG may be difficult to install on some systems. See CairoSVG's instructions [here](https://cairosvg.org/documentation/). Inkscape can be used as an alternative, but it must be configured under the Assets tab of the GUI. You may need to replace "inkscape" in the convert command with the full path to the executable.
+Note that CairoSVG may be difficult to install on some systems. See CairoSVG's instructions [here](https://cairosvg.org/documentation/). Inkscape can be used as an alternative, but it must be configured under the Assets tab of the GUI.
 
 Note that one of the examples, "The Taco Incident," does not contain any SVG costumes. If you want to get started without installing an SVG conversion tool, you should still be able to run this example. You can also manually convert every costume to bitmap to allow a project to run.
 

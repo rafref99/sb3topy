@@ -5,6 +5,7 @@ Handles svg conversion.
 """
 
 import logging
+import os
 import shlex
 import shutil
 import subprocess
@@ -66,6 +67,15 @@ def _convert_svg_cairo():
     Attempts to import cairosvg and return a function
     which uses cairosvg to convert an SVG to a PNG.
     """
+    homebrew_lib = "/opt/homebrew/lib"
+    if path.isdir(homebrew_lib):
+        fallback_path = os.environ.get("DYLD_FALLBACK_LIBRARY_PATH", "")
+        fallback_dirs = fallback_path.split(os.pathsep) if fallback_path else []
+        if homebrew_lib not in fallback_dirs:
+            fallback_dirs.insert(0, homebrew_lib)
+            os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = os.pathsep.join(
+                fallback_dirs)
+
     try:
         import cairosvg
     except ImportError:
