@@ -4,10 +4,13 @@ lists.py
 Handles custom list data structures
 """
 
+import logging
 import random
 from typing import Any, List as PyList, Union, TYPE_CHECKING
 
 from ..operators import toint
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .target import Target
@@ -139,8 +142,8 @@ class List:
 
     # TODO Variable/list reporters
     def show(self):
-        """Print list"""
-        print(self.list)
+        """Show list placeholder without writing to stdout."""
+        logger.debug("Show list requested for %r", self.list)
 
     def hide(self):
         """Do nothing"""

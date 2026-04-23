@@ -1276,7 +1276,7 @@
         "args": {
             "VARIABLE": "variable"
         },
-        "code": "print({VARIABLE})"
+        "code": "pass # show variable"
     },
     "data_hidevariable": {
         "type": "stack",

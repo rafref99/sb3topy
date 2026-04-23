@@ -12,6 +12,7 @@ TODO Warp deorator?
 __all__ = ['Target', 'warp']
 
 import asyncio
+import logging
 import math
 import random
 import time
@@ -29,6 +30,8 @@ from .costumes import Costumes
 from .lists import List
 from .pen import Pen
 from .sounds import Sounds
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..util import Util
@@ -396,7 +399,7 @@ class Target:
                     task.cancel()
             self._tasks[name] = []
         if this_name is None:
-            print("Failed to find running task for stop other.")
+            logger.warning("Failed to find running task for stop other.")
         else:
             self._tasks[this_name] = [this_task] if this_task else []
 
@@ -593,7 +596,7 @@ class Target:
             group.add(clone.sprite, layer=bottom)
             util.events.send_to(util, clone, "clone_start")
         else:
-            print("Max clones!")
+            logger.warning("Clone limit reached; max clones is %s.", config.MAX_CLONES)
 
     def delete_clone(self, util: 'Util'):
         """Delete this clone, will not delete original"""

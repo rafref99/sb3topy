@@ -197,7 +197,6 @@ def convert_svg_cmd(svg_path, output_dir, md5ext):
 
     # Attempt to run the command
     try:
-        print(repr(config.CONVERT_TIMEOUT))
         result = subprocess.run(shlex.split(cmd_str), check=True, capture_output=True,
                                 text=True, timeout=config.CONVERT_TIMEOUT)
 

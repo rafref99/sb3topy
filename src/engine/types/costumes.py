@@ -4,10 +4,14 @@ costumes.py
 Contains the Costumes class and helper functions
 """
 
+import logging
+
 import pygame as pg
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from ..config import STAGE_SIZE
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -96,9 +100,11 @@ class Costumes:
                 image = pg.image.load("assets/" + path).convert_alpha()
                 self._cache[path] = image
             except (pg.error, FileNotFoundError) as error:
-                print(
-                    f"Failed to load '{path}'! Using a blank image instead. Details:",
-                    error)
+                logger.warning(
+                    "Failed to load '%s'. Using a blank image instead.",
+                    path,
+                    exc_info=True,
+                )
 
                 image = pg.Surface((2, 2), pg.SRCALPHA)
                 image.fill((0, 0, 0, 0))

@@ -96,10 +96,13 @@ Deprecated:
 
 # pylint: disable=unused-import
 
+import logging
 from sys import version_info as PY_VERSION
 
 import pygame as pg
 from pygame.version import vernum as PG_VERSION
+
+logger = logging.getLogger(__name__)
 
 # Timing Settings
 TARGET_FPS = 31
@@ -119,7 +122,7 @@ FS_SCALE = 1
 SCALED_DISPLAY = False
 
 if SCALED_DISPLAY and PG_VERSION < (2,):
-    print("Scaled display requires Pygame 2.")
+    logger.warning("Scaled display requires Pygame 2.")
     SCALED_DISPLAY = False
 
 DISPLAY_FLAGS = 0

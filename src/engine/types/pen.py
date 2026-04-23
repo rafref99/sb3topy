@@ -9,11 +9,15 @@ TODO Consider using properties for the Pen?
 __all__ = ['Pen']
 
 
+import logging
+
 import pygame as pg
 from typing import Any, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from ..operators import tonum
 from ..config import STAGE_SIZE
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .target import Target
@@ -189,7 +193,7 @@ class Pen:
         elif prop == "transparency":
             self.hsva = (float(hue), float(sat), float(val), max(0.0, min(100.0, 100.0 - value)))
         else:
-            print("Invalid color property ", prop)
+            logger.warning("Invalid pen color property '%s'.", prop)
         self.color.hsva = self.hsva
 
     def change_color(self, prop: str, value: float):
@@ -204,7 +208,7 @@ class Pen:
         elif prop == "transparency":
             self.hsva = (float(hue), float(sat), float(val), max(0.0, min(100.0, float(alp) - value)))
         else:
-            print("Invalid color property ", prop)
+            logger.warning("Invalid pen color property '%s'.", prop)
         self.color.hsva = self.hsva
 
     def set_shade(self, value: float):

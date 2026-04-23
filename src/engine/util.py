@@ -10,6 +10,8 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from .runtime import Runtime, Sprites
     from .types import Target
@@ -64,7 +66,7 @@ class Util:
 
     def stop_all(self):
         """Ends execution of the main loop"""
-        print("Stop")
+        logger.info("Stopping project.")
         self.runtime.running = False
 
     def ask(self, prompt: str):

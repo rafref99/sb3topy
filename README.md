@@ -44,12 +44,17 @@ A full list of supported blocks can be found [here](docs/supported_blocks.md).
 
 3. Pick an example and hit Download & Run.
 
+## Example Downloads
+
+GUI example projects are downloaded and converted into a persistent folder under `~/sb3topy_examples/`, which resolves to the current user's home directory, such as `/Users/your-username/sb3topy_examples/` on macOS. Each example gets its own subfolder named from the example title and Scratch project id.
+
 ## Testing
 
-Run the test suite from the repository root with the local package on `PYTHONPATH`.
+Run the test suite from the repository root. For development, install the package in editable mode with the test, GUI, and SVG extras first.
 
 ```bash
-PYTHONPATH=src python3 -m pytest -q
+python3 -m pip install -e ".[dev,gui,svg]"
+python3 -m pytest -q
 ```
 
 ## Requirements
