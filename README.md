@@ -42,9 +42,8 @@ A full list of supported blocks can be found [here](docs/supported_blocks.md).
 
     ```python run_gui.pyw```
 
-   On macOS, you can also double-click `run_gui_macos.command` or the iconed `sb3topy_macos.app`.
-   On Windows, double-click `run_gui_windows.cmd`, then optionally run `create_windows_launcher.cmd` once to create an iconed `sb3topy Windows Launcher.lnk`.
-   The GUI window and both launcher icon formats are generated from the repository-root `icon.png`.
+   On macOS, you can double-click `run_gui_macos.command`.
+   On Windows, double-click `run_gui_windows.cmd`.
 
 3. Pick an example and hit Download & Run.
 

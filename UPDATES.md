@@ -156,6 +156,7 @@ This file documents the changes and improvements made during the project rework.
 - Changed the generated `data_showvariable` fallback from printing variable values to a no-op placeholder so generated projects keep stdout predictable.
 - Made the renderer explicitly full-frame: removed dirty-rect timing threshold configuration, stopped calling Pygame repaint helpers, and switched the frame presentation path to `pg.display.flip()`.
 - Fixed Stage-created clones of other sprites being registered under the Stage instead of the cloned target, which could leave clones uninitialized and crash rendering after input-triggered clone creation.
+- Modernized the profile_converter.py to make it more useful
 
 ### Launchers
 - Added `run_gui_macos.command`, an executable macOS launcher that runs the GUI from a source checkout.
