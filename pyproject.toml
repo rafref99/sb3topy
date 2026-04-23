@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sb3topy"
-version = "0.1.3a"
+version = "0.1.3a0"
 description = "Convert Scratch 3.0 projects into Python projects backed by a Pygame runtime."
 readme = "README.md"
-requires-python = "=3.12a-beta"
+requires-python = ">=3.12,<3.13"
 license = { file = "LICENSE" }
 authors = [
     { name = "SirLeguan" },
