@@ -3,7 +3,6 @@ sanitizer.py
 
 Contains functions which are useful for sanitization.
 
-TODO Would repr() be a better way to quote strings?
 """
 
 import logging
@@ -34,27 +33,13 @@ def clean_identifier(text: str, default: str = 'identifier') -> str:
 
 
 def quote_string(text: Any) -> str:
-    """Double "quotes" text"""
-    # Escape back slashes and double quotes
-    text_str = re.sub(r'()(?=\\|")', r"\\", str(text))
-
-    # Escape newlines
-    text_str = '\\n'.join(text_str.splitlines())
-
-    # Double quote the string
-    return '"' + text_str + '"'
+    """Return a valid Python string literal."""
+    return repr(str(text))
 
 
 def quote_field(text: Any) -> str:
-    """Single 'quotes' text"""
-    # Escape back slashes and single quotes
-    text_str = re.sub(r"()(?=\\|')", r"\\", str(text))
-
-    # Escape newlines
-    text_str = '\\n'.join(text_str.splitlines())
-
-    # Single quote the string
-    return "'" + text_str + "'"
+    """Return a valid Python string literal."""
+    return repr(str(text))
 
 
 def quote_number(text: Any) -> str:
@@ -148,8 +133,7 @@ def cast_literal(value: Any, to_type: str) -> str:
 def cast_wrapper(value: str, from_type: str, to_type: str) -> str:
     """Puts a runtime cast wrapper around code"""
 
-    # assert from_type in ('any', 'stack', 'int', 'float', 'str', 'bool', 'none')
-    # assert to_type in ('any', 'stack', 'int', 'float', 'str', 'bool', 'none')
+    # Expected types: any, stack, int, float, str, bool, none.
 
     # Don't cast any type
     if to_type == 'any':

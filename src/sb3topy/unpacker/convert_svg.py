@@ -16,17 +16,19 @@ from .. import config
 logger = logging.getLogger(__name__)
 
 
-def get_svg_function():
+def get_svg_function(svg_config=None):
     """
     Attempts find a way to convert SVG files. If USE_SVG_CMD is
     enabled, either the command will be used or nothing.
 
     Returns `None` if no conversion method could be found.
     """
+    if svg_config is None:
+        svg_config = config.snapshot_config()
 
     # If the command is enabled, try to use it
-    if config.USE_SVG_CMD:
-        func = _convert_svg_cmd()
+    if svg_config.USE_SVG_CMD:
+        func = _convert_svg_cmd(svg_config)
         if func is not None:
             return func
         logger.warning(
@@ -38,7 +40,7 @@ def get_svg_function():
     #     return func
 
     # Try to use cairosvg
-    func = _convert_svg_cairo()
+    func = _convert_svg_cairo(svg_config)
     if func is not None:
         return func
 
@@ -62,7 +64,7 @@ def uses_workers(use_workers):
     return decorator
 
 
-def _convert_svg_cairo():
+def _convert_svg_cairo(svg_config):
     """
     Attempts to import cairosvg and return a function
     which uses cairosvg to convert an SVG to a PNG.
@@ -87,11 +89,11 @@ def _convert_svg_cairo():
     @uses_workers(False)
     def convert_svg(svg_path, output_dir, md5ext):
         # Get the output path
-        filename = f"{md5ext.rpartition('.')[0]}-svg-{config.SVG_SCALE}x.png"
+        filename = f"{md5ext.rpartition('.')[0]}-svg-{svg_config.SVG_SCALE}x.png"
         png_path = path.join(output_dir, filename)
 
         # Verify the file hasn't already been converted
-        if not config.RECONVERT_IMAGES and path.isfile(png_path):
+        if not svg_config.RECONVERT_IMAGES and path.isfile(png_path):
             logger.debug(
                 "Skipping conversion of %s, already converted.", md5ext)
             return filename
@@ -101,7 +103,7 @@ def _convert_svg_cairo():
         # Convert the svg
         try:
             cairosvg.svg2png(url=svg_path, write_to=png_path,
-                             scale=config.SVG_SCALE)
+                             scale=svg_config.SVG_SCALE)
             normalize_png_alpha(png_path)
 
         # Handle an unexpected error
@@ -152,13 +154,13 @@ def _convert_svg_pyvips():
     return convert_svg
 
 
-def _convert_svg_cmd():
+def _convert_svg_cmd(svg_config):
     """
     Attempts to verify that the SVG_COMMAND is valid and returns the
     function which uses the command to convert an SVG to a PNG.
     """
     # Verify the command exists
-    prog = shlex.split(config.SVG_COMMAND)[0]
+    prog = shlex.split(svg_config.SVG_COMMAND)[0]
     if shutil.which(prog) is None:
         logger.error((
             "SVG conversion with a command is enabled "
@@ -166,21 +168,25 @@ def _convert_svg_cmd():
             prog
         )
         return None
-    return convert_svg_cmd
+    return lambda svg_path, output_dir, md5ext: convert_svg_cmd(
+        svg_path, output_dir, md5ext, svg_config)
 
 
 @uses_workers(True)
-def convert_svg_cmd(svg_path, output_dir, md5ext):
+def convert_svg_cmd(svg_path, output_dir, md5ext, svg_config=None):
     """
     Converts the svg using the configured command. The md5ext is
     used for logging purposes.
     """
+    if svg_config is None:
+        svg_config = config.snapshot_config()
+
     # Get the output path
-    filename = f"{md5ext.rpartition('.')[0]}-svg-{config.SVG_SCALE}x.png"
+    filename = f"{md5ext.rpartition('.')[0]}-svg-{svg_config.SVG_SCALE}x.png"
     png_path = path.join(output_dir, filename)
 
     # Verify the file hasn't already been converted
-    if not config.RECONVERT_IMAGES and path.isfile(png_path):
+    if not svg_config.RECONVERT_IMAGES and path.isfile(png_path):
         logger.debug(
             "Skipping conversion of %s, already converted.", md5ext)
         return filename
@@ -188,17 +194,17 @@ def convert_svg_cmd(svg_path, output_dir, md5ext):
     logger.debug("Converting %s to PNG using a command.", md5ext)
 
     # Get the conversion command
-    cmd_str = config.SVG_COMMAND.format(
+    cmd_str = svg_config.SVG_COMMAND.format(
         INPUT=shlex.quote(svg_path),
         OUTPUT=shlex.quote(png_path),
-        DPI=config.BASE_DPI*config.SVG_SCALE,
-        SCALE=config.SVG_SCALE
+        DPI=svg_config.BASE_DPI*svg_config.SVG_SCALE,
+        SCALE=svg_config.SVG_SCALE
     )
 
     # Attempt to run the command
     try:
         result = subprocess.run(shlex.split(cmd_str), check=True, capture_output=True,
-                                text=True, timeout=config.CONVERT_TIMEOUT)
+                                text=True, timeout=svg_config.CONVERT_TIMEOUT)
 
     # Command gave an error
     except subprocess.CalledProcessError as error:
@@ -222,8 +228,11 @@ def convert_svg_cmd(svg_path, output_dir, md5ext):
 
 
 @uses_workers(True)
-def fallback_image(_svg_path, output_dir, md5ext):
+def fallback_image(_svg_path, output_dir, md5ext, svg_config=None):
     """Save a blank PNG image instead of converting."""
+    if svg_config is None:
+        svg_config = config.snapshot_config()
+
     logger.debug("Saving fallback PNG for %s.", md5ext)
 
     # Get the output filename
@@ -232,7 +241,7 @@ def fallback_image(_svg_path, output_dir, md5ext):
 
     # Save the fallback image
     with open(png_path, 'wb') as image_file:
-        image_file.write(config.FALLBACK_IMAGE)
+        image_file.write(svg_config.FALLBACK_IMAGE)
 
     return filename
 

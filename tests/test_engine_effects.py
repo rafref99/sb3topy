@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest import mock
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -12,6 +13,42 @@ from engine.render import Render
 from engine.types.target import Target
 from engine.types.costumes import Costumes
 from engine.types.pen import Pen
+
+
+class _Copyable:
+    def copy(self, *_):
+        return _Copyable()
+
+
+class _LayerGroup:
+    def __init__(self):
+        self.added = []
+
+    def get_top_layer(self):
+        return 3
+
+    def get_layer_of_sprite(self, _sprite):
+        return 1
+
+    def get_top_sprite(self):
+        return pg.sprite.DirtySprite()
+
+    def change_layer(self, _sprite, _layer):
+        pass
+
+    def switch_layer(self, _layer1, _layer2):
+        pass
+
+    def add(self, sprite, layer=0):
+        self.added.append((sprite, layer))
+
+
+class _StageCloneSource(Target):
+    pass
+
+
+class _OtherCloneTarget(Target):
+    pass
 
 
 class CostumeEffectsTests(unittest.TestCase):
@@ -100,6 +137,26 @@ class CostumeEffectsTests(unittest.TestCase):
         self.assertEqual(screen.get_at((0, 0)), pg.Color(10, 20, 30, 255))
         self.assertEqual(screen.get_at((12, 12)), pg.Color(255, 0, 0, 255))
 
+    def test_render_flip_uses_full_frame_flip(self):
+        render = Render(SimpleNamespace(
+            group=pg.sprite.LayeredDirty(),
+            stage=SimpleNamespace(sprite=pg.sprite.DirtySprite()),
+            monitors=[],
+        ))
+        render.rects = [pg.Rect(0, 0, 1, 1)]
+        Pen.dirty = [pg.Rect(0, 0, 1, 1)]
+
+        with (
+            mock.patch.object(pg.display, "flip") as flip,
+            mock.patch.object(pg.display, "update") as update,
+        ):
+            render.flip()
+
+        flip.assert_called_once_with()
+        update.assert_not_called()
+        self.assertEqual(render.rects, [])
+        self.assertEqual(Pen.dirty, [])
+
     def test_ghost_100_is_not_rendered_but_remains_shown(self):
         target = Target.__new__(Target)
         target.sprite = pg.sprite.DirtySprite()
@@ -140,6 +197,46 @@ class CostumeEffectsTests(unittest.TestCase):
         offset += center
 
         self.assertEqual(offset, pg.math.Vector2(-1, 0))
+
+    def test_stage_created_clone_is_registered_with_cloned_target(self):
+        Target._clones = []
+        _StageCloneSource.clones = []
+        _OtherCloneTarget.clones = []
+
+        stage = _StageCloneSource.__new__(_StageCloneSource)
+        stage.sprite = pg.sprite.DirtySprite()
+        stage.sprite.visible = True
+
+        other = _OtherCloneTarget.__new__(_OtherCloneTarget)
+        other.sprite = pg.sprite.DirtySprite()
+        other.sprite.visible = True
+        other._xpos = 1
+        other._ypos = 2
+        other._direction = 90
+        other._shown = True
+        other.pen = _Copyable()
+        other.costume = _Copyable()
+        other.sounds = _Copyable()
+
+        group = _LayerGroup()
+        sent_events = []
+        util = SimpleNamespace(
+            sprites=SimpleNamespace(
+                targets={"Other": other},
+                group=group,
+            ),
+            events=SimpleNamespace(
+                send_to=lambda _util, target, event: sent_events.append(
+                    (target, event)),
+            ),
+        )
+
+        stage.create_clone_of(util, "Other")
+
+        self.assertEqual(len(_StageCloneSource.clones), 0)
+        self.assertEqual(len(_OtherCloneTarget.clones), 1)
+        self.assertIs(group.added[0][0].target, _OtherCloneTarget.clones[0])
+        self.assertEqual(sent_events, [(_OtherCloneTarget.clones[0], "clone_start")])
 
 
 if __name__ == "__main__":

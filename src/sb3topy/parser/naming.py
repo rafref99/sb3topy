@@ -220,9 +220,12 @@ class Events:
         """Gets the existing safe, unique identifier of a hat"""
         event = self.clean_event(name, args)
 
-        assert event in self.identifiers.dict, "Existing hat ident doesn't exist"
-        assert len(self.identifiers.dict[event]
-                   ) == 1, "Existing hat ident should be solo"
+        if event not in self.identifiers.dict:
+            logger.warning("Existing hat ident '%s' does not exist.", event)
+            return self.get_identifier(event)
+
+        if len(self.identifiers.dict[event]) != 1:
+            logger.warning("Existing hat ident '%s' is not solo.", event)
 
         return self.identifiers.dict[event][0]
 

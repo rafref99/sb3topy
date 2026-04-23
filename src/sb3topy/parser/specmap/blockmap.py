@@ -87,15 +87,16 @@ class BlockMap(NamedTuple):
 
         else:
             # The blockmap must have either code or a switch
-            assert block.get("switch") is not None, \
-                f"Blockmap for '{opcode}' must have either code or a switch"
+            if block.get("switch") is None:
+                raise ValueError(
+                    f"Blockmap for '{opcode}' must have either code or a switch")
 
             # No indentation
             indents = {}
 
         # Verify hats have a basename
-        assert block["type"] != "hat" or "basename" in block, \
-            f"Hat blockmap for '{opcode}' missing basename."
+        if block["type"] == "hat" and "basename" not in block:
+            raise ValueError(f"Hat blockmap for '{opcode}' missing basename.")
 
         return cls(block["type"], block["args"], code, indents,
                    block.get("switch"), block.get("basename"))
@@ -115,7 +116,12 @@ class BlockMap(NamedTuple):
         """
         for key in self.args:
             # The value should always be a string
-            assert isinstance(args[key], str), "Improperly parsed block arg"
+            if key not in args:
+                raise KeyError(f"Missing parsed block arg '{key}'")
+            if not isinstance(args[key], str):
+                raise TypeError(
+                    f"Improperly parsed block arg '{key}': "
+                    f"expected str, got {type(args[key]).__name__}")
 
             # Indent the value, if necessary
             indent = self.indents.get(key)

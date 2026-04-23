@@ -9,9 +9,11 @@ result seems to work quite well.
 """
 
 import argparse
+from dataclasses import dataclass
 import json
 import logging
 from os import path
+from typing import Any, Dict
 
 from ..config import __dict__ as _config
 from .consts import __dict__ as _consts
@@ -19,9 +21,11 @@ from .defaults import __dict__ as _defaults
 from .project import __dict__ as _project
 
 __all__ = ('restore_defaults', 'save_config', 'load_config',
-           'parse_args', 'get_config', 'set_config', 'AUTOLOAD_PATH')
+           'parse_args', 'get_config', 'set_config', 'snapshot_config',
+           'ConfigSnapshot', 'AUTOLOAD_PATH')
 
 logger = logging.getLogger(__name__)
+package_defaults = None
 
 
 all_defaults = {}
@@ -31,6 +35,34 @@ for _key, _value in _defaults.items():
 for _key, _value in _project.items():
     if _key[0] != '_':
         all_defaults[_key] = _value
+
+
+@dataclass(frozen=True)
+class ConfigSnapshot:
+    """Immutable config values captured for a single conversion run."""
+
+    values: Dict[str, Any]
+
+    def __getattr__(self, name: str) -> Any:
+        values = object.__getattribute__(self, "values")
+        try:
+            return values[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def get(self, name: str, default: Any = None) -> Any:
+        """Dict-style accessor for optional values."""
+        return self.values.get(name, default)
+
+    def to_dict(self, modifiable_only: bool = False) -> Dict[str, Any]:
+        """Returns snapshot values, optionally limited to modifiable ones."""
+        if not modifiable_only:
+            return dict(self.values)
+
+        return {
+            name: value for name, value in self.values.items()
+            if name in all_defaults
+        }
 
 
 def get_config(skip_unmodified=False):
@@ -51,6 +83,22 @@ def get_config(skip_unmodified=False):
         name: value for name, value in _config.items()
         if name in all_defaults
     }
+
+
+def snapshot_config(skip_unmodified=False):
+    """Captures the current modifiable config values for isolated use."""
+    if skip_unmodified:
+        values = {
+            name: value for name, value in _config.items()
+            if name.isupper() and name not in all_defaults
+        }
+        values.update(get_config(True))
+        return ConfigSnapshot(values)
+
+    return ConfigSnapshot({
+        name: value for name, value in _config.items()
+        if name.isupper()
+    })
 
 
 def set_config(new_config, skip_none=False):
@@ -145,6 +193,9 @@ def parse_args(args=None):
     """
     Allows configuration through a command line interface
     """
+    if package_defaults is not None:
+        set_config(package_defaults)
+
     # Initialize the parser
     parser = argparse.ArgumentParser(
         prog="sb3topy",
@@ -199,4 +250,5 @@ def set_all(value=1):
 
 # Load config file from the directory of this module
 load_config(path.join(path.dirname(__file__), "config.json"))
+package_defaults = get_config()
 AUTOLOAD_PATH = path.normpath(path.expanduser(_config['CONFIG_PATH']))

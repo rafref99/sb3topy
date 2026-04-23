@@ -16,10 +16,10 @@ __all__ = ('parse_project', 'Parser')
 logger = logging.getLogger(__name__)
 
 
-def parse_project(project, manifest):
+def parse_project(project, manifest, parser_config=None):
     """Parses project and returns the Python code"""
     logger.info("Compiling project into Python...")
-    return Parser(project, manifest).parse()
+    return Parser(project, manifest, parser_config).parse()
 
 
 class Parser:
@@ -34,8 +34,9 @@ class Parser:
             project.json.
     """
 
-    def __init__(self, project, manifest):
-        self.targets = targets.Targets()
+    def __init__(self, project, manifest, parser_config=None):
+        self.config = parser_config or config.snapshot_config()
+        self.targets = targets.Targets(self.config)
         self.manifest = manifest
         self.project = project
 
@@ -80,7 +81,7 @@ class Parser:
             target.second_pass()
 
         # Guess the type of each variable
-        if config.VAR_TYPES:
+        if self.config.VAR_TYPES:
             self.targets.digraph.resolve()
 
         # Name solo broadcast receivers
@@ -183,7 +184,11 @@ class Parser:
             clean_args = {}
             for name, end_type in blockmap.args.items():
                 clean_args[name] = self.parse_arg(name, args, end_type, block)
-                assert isinstance(clean_args[name], str)
+                if not isinstance(clean_args[name], str):
+                    raise TypeError(
+                        f"Parsed arg '{name}' for opcode "
+                        f"'{block['opcode']}' must be str, got "
+                        f"{type(clean_args[name]).__name__}")
 
             # Create the code for the block
             code = code + blockmap.format_code(clean_args) + "\n"

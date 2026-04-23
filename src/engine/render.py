@@ -117,8 +117,6 @@ class Render:
         self.group = sprites.group
         self.stage = sprites.stage.sprite
         self.monitors = sprites.monitors
-        self.group.set_timing_treshold(config.FLIP_THRESHOLD)
-
         self.rects = []
 
         # Debug font
@@ -126,12 +124,6 @@ class Render:
 
     def draw(self, display):
         """Handles drawing everything"""
-        for sprite in self.group:
-            previous_rect = getattr(sprite, "_sb3topy_previous_rect", None)
-            if previous_rect is not None:
-                self.group.repaint_rect(previous_rect)
-                delattr(sprite, "_sb3topy_previous_rect")
-
         display.screen.fill((255, 255, 255))
         display.screen.blit(self.stage.image, display.rect.topleft)
         self.stage.dirty = 0
@@ -160,8 +152,6 @@ class Render:
         """Draws all visible monitors"""
         for monitor in self.monitors:
             if monitor.visible:
-                # Add monitor rect to dirty rects
-                self.group.repaint_rect(monitor.rect)
                 self.rects.append(monitor.rect)
                 display.screen.blit(monitor.image, monitor.rect)
 
@@ -197,7 +187,6 @@ class Render:
         """Draws text for a single frame"""
         # Mark the drawn area as dirty
         rect = pg.Rect(pos, self.font.size(text))
-        self.group.repaint_rect(rect)
         self.rects.append(rect)
 
         # Draw a rect for text off the stage
@@ -210,8 +199,7 @@ class Render:
 
     def flip(self):
         """Update the display after drawing"""
-        pg.display.update(self.rects)
-        # pg.display.flip()
+        pg.display.flip()
         self.rects = []
         Pen.dirty = []
 

@@ -7,6 +7,8 @@ TODO export config
 """
 
 # from ctypes import windll
+from pathlib import Path
+
 import customtkinter as ctk
 
 from .. import config, main
@@ -15,27 +17,40 @@ from .examples import ExamplesFrame
 from .output import OutputFrame
 from .settings import SettingsFrame
 from .sidebar import Sidebar
+from . import style
 
 # windll.shcore.SetProcessDpiAwareness(True)
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
+
+try:
+    from tkinterdnd2 import TkinterDnD
+except ImportError:
+    _BaseWindow = ctk.CTk
+    DRAG_DROP_AVAILABLE = False
+else:
+    class _BaseWindow(ctk.CTk, TkinterDnD.DnDWrapper):
+        """CustomTkinter root with optional native file drop support."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.TkdndVersion = TkinterDnD._require(self)
+
+    DRAG_DROP_AVAILABLE = True
+
 
 def run_app():
     """Runs the GUI App"""
     App().mainloop()
 
 
-class App(ctk.CTk):
+class App(_BaseWindow):
     """Main App class"""
 
     def __init__(self):
         super().__init__()
-        self.title("sb3topy")
-
-        # Adjust the window size
-        # scale = round(self.winfo_fpixels('1i')) / 96
-        self.geometry("800x624")
-        # self.resizable(0, 0)
+        style.apply_window(self)
+        self._apply_icon()
         self.scale = 1.0
 
         # Create config variables
@@ -57,7 +72,7 @@ class App(ctk.CTk):
         self.output.grid(column=1, row=0, sticky="NSWE")
         self.settings.grid(column=1, row=0, sticky="NSWE")
 
-        self.columnconfigure(0, minsize=100)
+        self.columnconfigure(0, minsize=170)
         self.columnconfigure(1, minsize=300, weight=1)
         self.rowconfigure(0, minsize=300, weight=1)
 
@@ -65,6 +80,19 @@ class App(ctk.CTk):
 
         # config.config.set_all(1)
         # self.read_config()
+
+    def _apply_icon(self):
+        """Set the window icon from the repo root icon asset."""
+        icon_path = Path(__file__).resolve().parents[3] / "icon.png"
+        if not icon_path.is_file():
+            return
+
+        try:
+            import tkinter as tk
+            self._window_icon = tk.PhotoImage(file=str(icon_path))
+            self.iconphoto(True, self._window_icon)
+        except Exception:
+            pass
 
     def cb_mode(self, *_):
         """Called when the mode switches"""
@@ -150,7 +178,6 @@ class App(ctk.CTk):
         ctk.BooleanVar(self, name="ALLOW_RESIZE")
         ctk.BooleanVar(self, name="SCALED_DISPLAY")
         ctk.IntVar(self, name="FS_SCALE")
-        ctk.IntVar(self, name="FLIP_THRESHOLD_INV")
 
         # Project / Title
         ctk.BooleanVar(self, name="DYNAMIC_TITLE")
@@ -257,7 +284,6 @@ class App(ctk.CTk):
         self.setvar("ALLOW_RESIZE", config.ALLOW_RESIZE)
         self.setvar("SCALED_DISPLAY", config.SCALED_DISPLAY)
         self.setvar("FS_SCALE", config.FS_SCALE)
-        self.setvar("FLIP_THRESHOLD_INV", config.FLIP_THRESHOLD_INV)
 
         # Project / Title
         self.setvar("DYNAMIC_TITLE", config.DYNAMIC_TITLE)
@@ -358,7 +384,6 @@ class App(ctk.CTk):
         config.ALLOW_RESIZE = tkbool(self.getvar("ALLOW_RESIZE"))
         config.SCALED_DISPLAY = tkbool(self.getvar("SCALED_DISPLAY"))
         config.FS_SCALE = self.getvar("FS_SCALE")
-        config.FLIP_THRESHOLD_INV = self.getvar("FLIP_THRESHOLD_INV")
 
         # Project / Title
         config.DYNAMIC_TITLE = tkbool(self.getvar("DYNAMIC_TITLE"))

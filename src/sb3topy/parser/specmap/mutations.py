@@ -43,10 +43,11 @@ def hat_mutation(block, _target, blockmap):
 def mutation(opcode):
     """Decorator which adds a function to MUTATIONS"""
     def decorator(func):
-        assert opcode not in MUTATIONS, \
-            f"Duplicate mutation for '{opcode}'."
-        assert func.__code__.co_argcount == 3, \
-            f"Mutation for '{opcode}' must have 3 arguments."
+        if opcode in MUTATIONS:
+            raise ValueError(f"Duplicate mutation for '{opcode}'.")
+        if func.__code__.co_argcount != 3:
+            raise ValueError(
+                f"Mutation for '{opcode}' must have 3 arguments.")
 
         MUTATIONS[opcode] = func
         return func

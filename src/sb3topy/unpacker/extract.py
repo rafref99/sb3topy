@@ -17,7 +17,7 @@ __all__ = ['extract_project', 'Extract']
 logger = logging.getLogger(__name__)
 
 
-def extract_project(manifest: project.Manifest, project_path):
+def extract_project(manifest: project.Manifest, project_path, extract_config=None):
     """
     Extracts a project's json and assets, and returns a Project using
     the json. The assets are extracted into the folder provided by
@@ -40,7 +40,7 @@ def extract_project(manifest: project.Manifest, project_path):
                 "Could not find 'project.json' in '%s'", project_path)
             return None
 
-        return Extract(manifest, project_zip).project
+        return Extract(manifest, project_zip, extract_config).project
 
     except FileNotFoundError:
         logger.error("Invalid project path '%s'", project_path)
@@ -69,7 +69,8 @@ class Extract:
         project_zip: The input sb3 ZipFile.
     """
 
-    def __init__(self, manifest: project.Manifest, project_zip: zipfile.ZipFile):
+    def __init__(self, manifest: project.Manifest, project_zip: zipfile.ZipFile, extract_config=None):
+        self.config = extract_config or config.snapshot_config()
         self.output_dir = manifest.output_dir
         self.project_zip = project_zip
 
@@ -99,7 +100,7 @@ class Extract:
         save_path = path.join(self.output_dir, "assets", md5ext)
 
         # If the file already exists, don't download it
-        if path.isfile(save_path) and not config.FRESHEN_ASSETS:
+        if path.isfile(save_path) and not self.config.FRESHEN_ASSETS:
             logger.debug(
                 "Skipping extraction of asset '%s' (already exists)", md5ext)
             return md5ext
@@ -110,7 +111,7 @@ class Extract:
         asset = self.project_zip.read(md5ext)
 
         # Verify the asset's md5 hash
-        if config.VERIFY_ASSETS:
+        if self.config.VERIFY_ASSETS:
             md5_hash = md5(asset).hexdigest()
             if not md5_hash + '.' + md5ext.partition('.')[2] == md5ext:
                 logger.error(

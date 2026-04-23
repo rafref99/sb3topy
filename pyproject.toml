@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 gui = [
     "customtkinter>=5.2",
+    "tkinterdnd2>=0.4",
 ]
 svg = [
     "CairoSVG>=2.7",
@@ -29,7 +30,10 @@ dev = [
     "pytest>=8",
 ]
 all = [
+    "pygame>=2.0.0",
+    "requests>=2.31",
     "customtkinter>=5.2",
+    "tkinterdnd2>=0.4",
     "CairoSVG>=2.7",
 ]
 

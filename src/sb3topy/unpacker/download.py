@@ -22,7 +22,7 @@ __all__ = ['download_project', 'Download']
 logger = logging.getLogger(__name__)
 
 
-def download_project(manifest: project.Manifest, project_url):
+def download_project(manifest: project.Manifest, project_url, download_config=None):
     """
     Downloads a project's json and assets, and returns a Project using
     the json. The assets are downloaded into the folder provided by
@@ -41,7 +41,7 @@ def download_project(manifest: project.Manifest, project_url):
     logger.info("Downloading project...")
     logger.debug("Downloading project '%s'", match[0])
 
-    return Download(manifest, match[0]).project
+    return Download(manifest, match[0], download_config=download_config).project
 
 
 class Download:
@@ -60,7 +60,8 @@ class Download:
         project_id: The project id of the project to download
     """
 
-    def __init__(self, manifest: project.Manifest, project_id, output_dir=None):
+    def __init__(self, manifest: project.Manifest, project_id, output_dir=None, download_config=None):
+        self.config = download_config or config.snapshot_config()
         self.output_dir = manifest.output_dir
         self.project_id = project_id
 
@@ -81,7 +82,7 @@ class Download:
         self.project = project.Project(project_json)
 
         # Download the assets
-        pool = ThreadPool(config.DOWNLOAD_THREADS)
+        pool = ThreadPool(self.config.DOWNLOAD_THREADS)
         manifest.costumes.update(pool.imap_unordered(
             self.download_asset, self.project.get_costumes()))
         manifest.sounds.update(pool.imap_unordered(
@@ -92,7 +93,7 @@ class Download:
     def project_metadata(self):
         """Requests a token for the project."""
 
-        url = f"{config.PROJECT_TOKEN_HOST}/{self.project_id}"
+        url = f"{self.config.PROJECT_TOKEN_HOST}/{self.project_id}"
 
         try:
             resp = requests.get(url)
@@ -111,7 +112,7 @@ class Download:
                 "Failed to download project json; requests not installed.")
             return None
 
-        url = f"{config.PROJECT_HOST}/{self.project_id}?token={token}"
+        url = f"{self.config.PROJECT_HOST}/{self.project_id}?token={token}"
 
         # Download the project.json
         try:
@@ -123,15 +124,15 @@ class Download:
             return None
 
         # Verify the json SHA256 matches
-        if config.JSON_SHA:
+        if self.config.JSON_SHA:
             logger.debug("Validating JSON SHA256...")
             json_hash = sha256(resp.content).hexdigest()
 
             # If JSON_SHA is set to True, give a warning
             # Tkinter variables treat True as 1
-            if config.JSON_SHA in (True, 1):
+            if self.config.JSON_SHA in (True, 1):
                 logger.warning("SHA256 not provided for JSON:\n%s", json_hash)
-            elif json_hash != config.JSON_SHA:
+            elif json_hash != self.config.JSON_SHA:
                 logger.error(
                     "SHA256 of JSON failed (project has been modified):\n%s", json_hash)
                 return None
@@ -149,11 +150,11 @@ class Download:
         Intended for use in a Pool.
         """
         # Get download and save paths from md5ext
-        url = f"{config.ASSET_HOST}/internalapi/asset/{md5ext}/get/"
+        url = f"{self.config.ASSET_HOST}/internalapi/asset/{md5ext}/get/"
         save_path = path.join(self.output_dir, "assets", md5ext)
 
         # If the file already exists, don't download it
-        if path.isfile(save_path) and not config.FRESHEN_ASSETS:
+        if path.isfile(save_path) and not self.config.FRESHEN_ASSETS:
             logger.debug(
                 "Skipping download of asset '%s' (already exists)", md5ext)
             return md5ext, md5ext
@@ -170,7 +171,7 @@ class Download:
             return md5ext, None
 
         # Verify the asset's md5 hash
-        if config.VERIFY_ASSETS:
+        if self.config.VERIFY_ASSETS:
             md5_hash = md5(resp.content).hexdigest()
             if not md5_hash + '.' + md5ext.partition('.')[2] == md5ext:
                 logger.error(

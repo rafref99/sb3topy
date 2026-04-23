@@ -25,10 +25,10 @@ class Targets:
     targets - The dict linking target names to Target instances
     """
 
-    def __init__(self):
+    def __init__(self, config_snapshot=None):
         self.names = naming.Sprites()
         self.targets: Dict[str, 'Target'] = {}
-        self.digraph = DiGraph()
+        self.digraph = DiGraph(config_snapshot)
 
     def add_targets(self, targets: Iterable[Dict[str, Any]]):
         """Creates and adds each target to the internal dict"""

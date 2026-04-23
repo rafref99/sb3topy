@@ -73,7 +73,6 @@ Project:
         allow resize
         scaled display
         fs scale
-        flip threshold
 
     Title
         text
@@ -126,17 +125,26 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from .. import config
+from . import style
 
 
 class SettingsFrame(ctk.CTkFrame):
     """Handles the Settings tab"""
 
     def __init__(self, app, **kwargs):
-        super().__init__(app, **kwargs)
+        super().__init__(app, **kwargs, fg_color=style.APP_BG)
         self.app = app
 
-        self.tabview = ctk.CTkTabview(self)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tabview = ctk.CTkTabview(
+            self, fg_color=style.SURFACE, segmented_button_fg_color=style.SURFACE_ALT,
+            segmented_button_selected_color=style.ACCENT,
+            segmented_button_selected_hover_color=style.ACCENT_ACTIVE_HOVER,
+            segmented_button_unselected_color=style.BORDER,
+            segmented_button_unselected_hover_color=style.SURFACE_ALT,
+            text_color=style.TEXT,
+            text_color_disabled=style.MUTED,
+            corner_radius=8)
+        self.tabview.pack(fill="both", expand=True, padx=28, pady=28)
 
         self.general_tab = self.tabview.add("General")
         self.project_tab = self.tabview.add("Project")
@@ -173,9 +181,9 @@ class GeneralSettings(ctk.CTkFrame):
         super().__init__(parent, **kwargs, fg_color="transparent")
         self.app = app
 
-        paths_frame = ctk.CTkFrame(self)
-        quick_frame = ctk.CTkFrame(self)
-        config_frame = ctk.CTkFrame(self)
+        paths_frame = style.section(self)
+        quick_frame = style.section(self)
+        config_frame = style.section(self)
 
         self.project_path = ctk.StringVar(app, name="PROJECT_PATH")
         self.project_url = ctk.StringVar(app, name="PROJECT_URL")
@@ -237,12 +245,13 @@ class GeneralSettings(ctk.CTkFrame):
         ctk.CTkLabel(config_frame, text="Configuration File", font=("", 12, "bold")).grid(row=0, column=0, sticky="w", padx=10, pady=5)
         config_label = ctk.CTkLabel(config_frame, text="Path:")
         config_box = ctk.CTkEntry(config_frame, textvariable=self.config_path)
+        action_frame = ctk.CTkFrame(config_frame, fg_color="transparent")
         export_button = ctk.CTkButton(
             config_frame, text="Export...", command=self.config_export, width=100)
         self.save_button = ctk.CTkButton(
-            config_frame, text="Save", command=self.config_save, width=100)
+            action_frame, text="Save", command=self.config_save, width=100)
         self.load_button = ctk.CTkButton(
-            config_frame, text="Load", command=self.config_load, width=100)
+            action_frame, text="Load", command=self.config_load, width=100)
         self.load_check = ctk.CTkCheckBox(
             config_frame, text="Load on Start",
             variable=self.autoload, command=self.update_buttons)
@@ -274,10 +283,12 @@ class GeneralSettings(ctk.CTkFrame):
         config_label.grid(column=0, row=1, sticky="W", padx=10)
         self.load_check.grid(column=1, row=1, sticky="W", padx=6, columnspan=3)
         config_box.grid(column=0, row=2, sticky="EW",
-                        padx=10, pady=5, columnspan=2)
-        export_button.grid(column=2, row=2, sticky="W", padx=2)
-        self.save_button.grid(column=3, row=2, sticky="W", padx=2)
-        self.load_button.grid(column=4, row=2, sticky="W", padx=2, pady=(0, 10))
+                        padx=10, pady=5, columnspan=3)
+        export_button.grid(column=3, row=2, sticky="EW", padx=(2, 10), pady=5)
+        action_frame.grid(column=0, row=3, sticky="E", padx=10, pady=(0, 12),
+                          columnspan=4)
+        self.save_button.grid(column=0, row=0, sticky="EW", padx=(0, 6))
+        self.load_button.grid(column=1, row=0, sticky="EW")
 
         paths_frame.grid(column=0, row=0, sticky="NSEW", padx=10, pady=5)
         quick_frame.grid(column=0, row=1, sticky="NSEW", padx=10, pady=5)
@@ -286,11 +297,12 @@ class GeneralSettings(ctk.CTkFrame):
         paths_frame.columnconfigure(1, weight=1)
         quick_frame.columnconfigure(2, weight=1)
         config_frame.columnconfigure(1, weight=1)
+        config_frame.columnconfigure(2, weight=1)
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)
 
-    def type_guess_toggle(self, _):
+    def type_guess_toggle(self, _=None):
         """Called when the type_gussing checkbox is toggled"""
         value = self.type_guessing.get()
         if value == 0:
@@ -461,10 +473,10 @@ class AssetSettings(ctk.CTkFrame):
         super().__init__(parent, **kwargs, fg_color="transparent")
         self.app = app
 
-        integ_frame = ctk.CTkFrame(self)
-        worker_frame = ctk.CTkFrame(self)
-        svg_frame = ctk.CTkFrame(self)
-        mp3_frame = ctk.CTkFrame(self)
+        integ_frame = style.section(self)
+        worker_frame = style.section(self)
+        svg_frame = style.section(self)
+        mp3_frame = style.section(self)
 
         self.verify_assets = ctk.BooleanVar(app, name="VERIFY_ASSETS")
         self.reconvert_images = ctk.BooleanVar(app, name="RECONVERT_IMAGES")
@@ -570,9 +582,9 @@ class OptimizationSettings(ctk.CTkFrame):
         super().__init__(parent, **kwargs, fg_color="transparent")
         self.app = app
 
-        toggle_frame = ctk.CTkFrame(self)
-        compat_frame = ctk.CTkFrame(self)
-        adv_frame = ctk.CTkFrame(self)
+        toggle_frame = style.section(self)
+        compat_frame = style.section(self)
+        adv_frame = style.section(self)
 
         self.static_lists = ctk.BooleanVar(app, name="LIST_TYPES")
         self.var_types = ctk.BooleanVar(app, name="VAR_TYPES")
@@ -650,13 +662,13 @@ class ProjectFrame(ctk.CTkFrame):
         super().__init__(parent, **kwargs, fg_color="transparent")
         self.app = app
 
-        timing_frame = ctk.CTkFrame(self)
-        display_frame = ctk.CTkFrame(self)
-        title_frame = ctk.CTkFrame(self)
-        audio_frame = ctk.CTkFrame(self)
-        limits_frame = ctk.CTkFrame(self)
-        hotkey_frame = ctk.CTkFrame(self)
-        misc_frame = ctk.CTkFrame(self)
+        timing_frame = style.section(self)
+        display_frame = style.section(self)
+        title_frame = style.section(self)
+        audio_frame = style.section(self)
+        limits_frame = style.section(self)
+        hotkey_frame = style.section(self)
+        misc_frame = style.section(self)
 
         self.target_fps = ctk.IntVar(app, name="TARGET_FPS")
         self.turbo_mode = ctk.BooleanVar(app, name="TURBO_MODE")
@@ -683,7 +695,6 @@ class ProjectFrame(ctk.CTkFrame):
         self.allow_resize = ctk.BooleanVar(app, name="ALLOW_RESIZE")
         self.scaled_display = ctk.BooleanVar(app, name="SCALED_DISPLAY")
         self.fs_scale = ctk.IntVar(app, name="FS_SCALE")
-        self.iflip_threshold = ctk.IntVar(app, name="FLIP_THRESHOLD_INV")
 
         ctk.CTkLabel(display_frame, text="Display", font=("", 12, "bold")).grid(row=0, column=0, sticky="w", padx=10, pady=5)
         stage_label = ctk.CTkLabel(display_frame, text="Stage Size:")
@@ -710,10 +721,6 @@ class ProjectFrame(ctk.CTkFrame):
         fs_spin = ctk.CTkEntry(
             display_frame, width=70,
             textvariable=self.fs_scale)
-        flip_label = ctk.CTkLabel(display_frame, text="Flip Threshold (1/s):")
-        flip_spin = ctk.CTkEntry(
-            display_frame, width=70,
-            textvariable=self.iflip_threshold)
 
         self.title_text = ctk.StringVar(app, name="TITLE")
         self.dynamic_title = ctk.BooleanVar(app, name="DYNAMIC_TITLE")
@@ -809,9 +816,6 @@ class ProjectFrame(ctk.CTkFrame):
         scaled_check.grid(column=0, row=3, sticky="W", columnspan=2)
         fs_label.grid(column=0, row=4, sticky="W", columnspan=2)
         fs_spin.grid(column=2, row=4, sticky="W", padx=3, pady=3, columnspan=2)
-        flip_label.grid(column=0, row=5, sticky="W", columnspan=2)
-        flip_spin.grid(column=2, row=5, sticky="W",
-                       padx=3, pady=3, columnspan=2)
         scaled_check.configure(state="disabled")
 
         title_label.grid(column=0, row=0, sticky="W")
@@ -897,8 +901,8 @@ class DebugFrame(ctk.CTkFrame):
         super().__init__(parent, **kwargs, fg_color="transparent")
         self.app = app
 
-        debug_frame = ctk.CTkFrame(self)
-        log_frame = ctk.CTkFrame(self)
+        debug_frame = style.section(self)
+        log_frame = style.section(self)
 
         self.debug_json = ctk.BooleanVar(app, name="DEBUG_JSON")
         self.format_json = ctk.BooleanVar(app, name="FORMAT_JSON")

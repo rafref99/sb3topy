@@ -10,12 +10,14 @@ import customtkinter as ctk
 import queue
 import logging
 
+from . import style
+
 
 class OutputFrame(ctk.CTkFrame):
     """Handles the Output tab, logging"""
 
     def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
+        super().__init__(parent, **kwargs, fg_color=style.APP_BG)
 
         self.app = parent
 
@@ -24,27 +26,46 @@ class OutputFrame(ctk.CTkFrame):
         self.finished = False
         self.dead_polls = 0
 
-        self.text = ctk.CTkTextbox(self, width=32, height=17.5, state="disabled")
+        header = style.page_header(
+            self, "Output",
+            "Conversion progress and runtime launch messages appear here.")
+
+        log_frame = style.section(self, "Log")
+        self.status = ctk.StringVar(value="Idle")
+        status_label = ctk.CTkLabel(
+            log_frame, textvariable=self.status, text_color=style.MUTED,
+            anchor="e")
+
+        self.text = ctk.CTkTextbox(
+            log_frame, width=32, height=17.5, state="disabled",
+            font=style.FONT_MONO, corner_radius=8,
+            border_color=style.BORDER, border_width=1)
 
         self.show_info = ctk.BooleanVar(value=True)
         self.show_debug = ctk.BooleanVar()
-        self.debug_check = ctk.CTkCheckBox(
-            self, text="Debug Output",
+        self.debug_check = style.checkbox(
+            log_frame, text="Debug Output",
             variable=self.show_debug, command=self.debug_tag)
 
-        export_button = ctk.CTkButton(
-            self, text="Export Log...", command=self.export_log)
+        export_button = style.secondary_button(
+            log_frame, text="Export Log...", command=self.export_log,
+            width=130)
 
-        # Grid everything
-        self.text.grid(column=0, row=0, columnspan=4,
-                       sticky="NSEW", padx=10, pady=10)
+        header.grid(column=0, row=0, sticky="ew", padx=28, pady=(26, 18))
+        log_frame.grid(column=0, row=1, sticky="nsew", padx=28, pady=(0, 28))
 
-        self.debug_check.grid(column=0, row=1, sticky="NSW", padx=20, pady=10)
+        status_label.grid(column=1, row=0, sticky="e", padx=16, pady=(14, 6))
+        self.text.grid(column=0, row=1, columnspan=2,
+                       sticky="NSEW", padx=16, pady=(0, 12))
 
-        export_button.grid(row=1, column=3, sticky="NSE", padx=20, pady=10)
+        self.debug_check.grid(column=0, row=2, sticky="w", padx=16, pady=(0, 16))
+        export_button.grid(row=2, column=1, sticky="e", padx=16, pady=(0, 16))
 
-        self.columnconfigure(3, weight=1)
-        self.rowconfigure(0, weight=1)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.columnconfigure(1, weight=1)
+        log_frame.rowconfigure(1, weight=1)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
 
         # Output theme
         self.font = ("Courier", 10)
@@ -63,6 +84,7 @@ class OutputFrame(ctk.CTkFrame):
         self.queue = log_queue
         self.finished = False
         self.dead_polls = 0
+        self.status.set("Running")
 
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
@@ -82,6 +104,17 @@ class OutputFrame(ctk.CTkFrame):
             formatter = logging.Formatter()
             self.text.insert("end", formatter.formatException(record.exc_info))
             self.text.insert("end", "\n")
+
+    def unexpected_end_message(self):
+        """Build a more actionable message for an aborted worker/log stream."""
+        exitcode = getattr(self.process, "exitcode", None)
+        if exitcode is None:
+            return "[ERROR] Task ended before the log stream finished.\n"
+
+        return (
+            "[ERROR] Task ended before the log stream finished. "
+            f"Worker exit code: {exitcode}.\n"
+        )
 
     def update_loop(self):
         """Updates the textbox with log messages"""
@@ -103,6 +136,7 @@ class OutputFrame(ctk.CTkFrame):
         self.text.configure(state="disabled")
 
         if self.finished:
+            self.status.set("Complete")
             return
 
         if self.process.is_alive():
@@ -116,10 +150,15 @@ class OutputFrame(ctk.CTkFrame):
             return
 
         self.text.configure(state="normal")
-        self.text.insert("end", "[ERROR] Task ended before the log stream finished.\n")
+        self.text.insert("end", self.unexpected_end_message())
         self.text.see("end")
         self.text.configure(state="disabled")
         self.finished = True
+        exitcode = getattr(self.process, "exitcode", None)
+        if exitcode is None:
+            self.status.set("Log stream ended unexpectedly")
+        else:
+            self.status.set(f"Worker exited unexpectedly ({exitcode})")
 
     def export_log(self):
         """Save the current log to a file"""

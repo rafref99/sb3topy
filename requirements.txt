@@ -1,4 +1,5 @@
-CairoSVG
 pygame>=2.0.0
-requests
-customtkinter
+requests>=2.31
+customtkinter>=5.2
+tkinterdnd2>=0.4
+CairoSVG>=2.7

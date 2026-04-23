@@ -61,8 +61,9 @@ class Node:
             itself from depending on the unresolved status
     """
 
-    def __init__(self, id_tuple, unresolved):
+    def __init__(self, id_tuple, unresolved, config_snapshot=None):
         self.id_tuple = id_tuple
+        self.config = config_snapshot or config.snapshot_config()
 
         self.unresolved = unresolved
         self.unresolved.add(self)
@@ -86,7 +87,10 @@ class Node:
         if isinstance(set_type, Node):
             self.parent_nodes.add(set_type)
         else:
-            assert isinstance(set_type, str)
+            if not isinstance(set_type, str):
+                raise TypeError(
+                    "set_type must be a str or Node, got "
+                    f"{type(set_type).__name__}")
             self.types_set.add(set_type)
 
     def resolve(self, chain, loops):
@@ -172,8 +176,7 @@ class Node:
         logger.debug("Resolved %s type node '%s' as '%s'",
                       self.id_tuple[0], self.id_tuple[-1], self.known_type)
 
-    @staticmethod
-    def resolve_type(types_set):
+    def resolve_type(self, types_set):
         """
         Determines what type a node should be
         based on the different types it can be.
@@ -185,20 +188,20 @@ class Node:
 
         if 'any' in types_set:
             # The return type is any too
-            if not config.DISABLE_ANY_CAST:
+            if not self.config.DISABLE_ANY_CAST:
                 return 'any'
 
             # Cast from any to something instead
             types_set.remove('any')
 
         # Replace int casting with float
-        if config.DISABLE_INT_CAST:
+        if self.config.DISABLE_INT_CAST:
             if 'int' in types_set:
                 types_set.remove('int')
                 types_set.add('float')
 
         # Aggressive numeric casting
-        if config.AGGRESSIVE_NUM_CAST:
+        if self.config.AGGRESSIVE_NUM_CAST:
             if 'float' in types_set:
                 return 'float'
 
@@ -210,7 +213,7 @@ class Node:
             return types_set.pop()
 
         if 'str' in types_set:
-            if config.DISABLE_STR_CAST:
+            if self.config.DISABLE_STR_CAST:
                 return 'any'
             return 'str'
 
@@ -240,7 +243,8 @@ class DiGraph:
         unresolved: A set containing all unresolved nodes
     """
 
-    def __init__(self):
+    def __init__(self, config_snapshot=None):
+        self.config = config_snapshot or config.snapshot_config()
         self.nodes: Dict[Any, Node] = {}
         self.unresolved = set()
 
@@ -248,7 +252,7 @@ class DiGraph:
         """Creates a node from an id tuple"""
         # Verify the node hasn't been created
         if id_tuple not in self.nodes:
-            self.nodes[id_tuple] = Node(id_tuple, self.unresolved)
+            self.nodes[id_tuple] = Node(id_tuple, self.unresolved, self.config)
 
         else:
             logger.warning("Duplicate type node %s", id_tuple)
@@ -268,7 +272,7 @@ class DiGraph:
     def resolve(self):
         """Resolves all nodes"""
 
-        if config.RENDER_GRAPH:
+        if self.config.RENDER_GRAPH:
             render = Render(self)
 
         logger.debug("Resolving type graph...")
@@ -278,7 +282,7 @@ class DiGraph:
             # Get and resolve an unresolved node
             next(iter(self.unresolved)).resolve(set(), set())
 
-        if config.RENDER_GRAPH:
+        if self.config.RENDER_GRAPH:
             render.render()
 
 
@@ -311,6 +315,7 @@ class Render:
         logger.debug("Pre-rendering type graph.")
 
         self.digraph = digraph
+        self.config = digraph.config
 
         self.nodes = {node: frozenset(node.parent_nodes)
                       for node in digraph.nodes.values()}
@@ -349,7 +354,7 @@ class Render:
                 "Cannot render type graph; graphviz not installed.")
             return
 
-        graph = gvDigraph(engine=config.GRAPH_ENGINE)
+        graph = gvDigraph(engine=self.config.GRAPH_ENGINE)
         # graph.attr(overlap="false")
 
         for name, cluster in self.clusters.items():
@@ -361,7 +366,7 @@ class Render:
         self.render_edges(graph)
 
         # graph = graph.unflatten(stagger=3)
-        graph.render(view=False, directory=config.OUTPUT_PATH,
+        graph.render(view=False, directory=self.config.OUTPUT_PATH,
                      filename="type_graph")
 
     def render_stage(self, graph: gvDigraph, cluster):
@@ -376,7 +381,7 @@ class Render:
     def render_target(self, graph: gvDigraph, name, cluster):
         """Renders a target cluster"""
 
-        prefix = "cluster_" if config.TARGET_CLUSTERS else ""
+        prefix = "cluster_" if self.config.TARGET_CLUSTERS else ""
 
         self.unique_id += 1
         with graph.subgraph(name=prefix+str(self.unique_id)) as tgraph:
@@ -395,7 +400,7 @@ class Render:
     def render_proc(self, graph: gvDigraph, name, cluster):
         """Renders a procedure cluster"""
 
-        prefix = "cluster_" if config.PROC_CLUSTERS else ""
+        prefix = "cluster_" if self.config.PROC_CLUSTERS else ""
 
         self.unique_id += 1
         with graph.subgraph(name=prefix+str(self.unique_id)) as pgraph:

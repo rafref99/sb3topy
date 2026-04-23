@@ -60,61 +60,70 @@ class SanitizationTests(unittest.TestCase):
     def test_quote_string(self):
         """Tests the quote_string method"""
         result = sanitizer.quote_string("hello world")
-        self.assertEqual(result, '"hello world"', "String not quoted")
+        self.assertEqual(eval(result), "hello world", "String not quoted")
 
         result = sanitizer.quote_string("'hello world")
-        self.assertEqual(result, '"\'hello world"', "Single quote escaped")
+        self.assertEqual(eval(result), "'hello world", "Single quote escaped")
 
         result = sanitizer.quote_string('"hello world"')
-        self.assertEqual(result, '"\\"hello world\\""',
+        self.assertEqual(eval(result), '"hello world"',
                          "Double quote not escaped")
 
         result = sanitizer.quote_string(r'\n\t\\"\"')
-        self.assertEqual(result, r'"\\n\\t\\\\\"\\\""',
+        self.assertEqual(eval(result), r'\n\t\\"\"',
                          "Slashes not escaped correctly")
 
         result = sanitizer.quote_string(None)
-        self.assertEqual(result, '"None"', "None not quoted correctly")
+        self.assertEqual(eval(result), "None", "None not quoted correctly")
 
         result = sanitizer.quote_string(1234)
-        self.assertEqual(result, '"1234"', "Integer not quoted correctly")
+        self.assertEqual(eval(result), "1234", "Integer not quoted correctly")
 
         result = sanitizer.quote_string(3.14)
-        self.assertEqual(result, '"3.14"', "Float not quoted correctly")
+        self.assertEqual(eval(result), "3.14", "Float not quoted correctly")
 
-        # NOTE A trailing newline is removed. Is that bad?
         result = sanitizer.quote_string("hello\rworld\n\n")
-        self.assertEqual(result, '"hello\\nworld\\n"',
+        self.assertEqual(eval(result), "hello\rworld\n\n",
                          "Newline not escaped correctly")
+
+        text = '"; __import__("os").system("echo unsafe") #'
+        result = sanitizer.quote_string(text)
+        compile("value = " + result, "<sanitizer-test>", "exec")
+        self.assertEqual(eval(result), text)
 
     def test_quote_field(self):
         """Tests the quote_field method"""
         result = sanitizer.quote_field("hello world")
-        self.assertEqual(result, "'hello world'", "String not quoted")
+        self.assertEqual(eval(result), "hello world", "String not quoted")
 
         result = sanitizer.quote_field('"hello world')
-        self.assertEqual(result, "'\"hello world'", "Double quote escaped")
+        self.assertEqual(eval(result), '"hello world', "Double quote escaped")
 
         result = sanitizer.quote_field("'hello world'")
-        self.assertEqual(result, "'\\'hello world\\''",
+        self.assertEqual(eval(result), "'hello world'",
                          "Single quote not escaped")
 
         result = sanitizer.quote_field(r"\n\t\\'\'")
-        self.assertEqual(result, r"'\\n\\t\\\\\'\\\''",
+        self.assertEqual(eval(result), r"\n\t\\'\'",
                          "Slashes not escaped correctly")
 
         result = sanitizer.quote_field(None)
-        self.assertEqual(result, "'None'", "None not quoted correctly")
+        self.assertEqual(eval(result), "None", "None not quoted correctly")
 
         result = sanitizer.quote_field(1234)
-        self.assertEqual(result, "'1234'", "Integer not quoted correctly")
+        self.assertEqual(eval(result), "1234", "Integer not quoted correctly")
 
         result = sanitizer.quote_field(3.14)
-        self.assertEqual(result, "'3.14'", "Float not quoted correctly")
+        self.assertEqual(eval(result), "3.14", "Float not quoted correctly")
 
         result = sanitizer.quote_field("hello\rworld\n\n")
-        self.assertEqual(result, "'hello\\nworld\\n'",
+        self.assertEqual(eval(result), "hello\rworld\n\n",
                          "Newline not escaped correctly")
+
+        text = "'; __import__(\"os\").system(\"echo unsafe\") #"
+        result = sanitizer.quote_field(text)
+        compile("value = " + result, "<sanitizer-test>", "exec")
+        self.assertEqual(eval(result), text)
 
     def test_quote_number(self):
         """Tests the quote_number method"""
@@ -137,23 +146,23 @@ class SanitizationTests(unittest.TestCase):
         self.assertEqual(result, '3.14', "Float str quoted")
 
         result = sanitizer.quote_number('5.12345678901234567890')
-        self.assertEqual(result, '"5.12345678901234567890"',
+        self.assertEqual(eval(result), '5.12345678901234567890',
                          "Long float str not quoted")
 
         result = sanitizer.quote_number('nan')
-        self.assertEqual(result, '"nan"', "'nan' not quoted")
+        self.assertEqual(eval(result), 'nan', "'nan' not quoted")
 
         result = sanitizer.quote_number('+inf')
-        self.assertEqual(result, '"+inf"', "'+inf' not quoted")
+        self.assertEqual(eval(result), '+inf', "'+inf' not quoted")
 
         result = sanitizer.quote_number(False)
-        self.assertEqual(result, '"False"', "False not quoted")
+        self.assertEqual(eval(result), 'False', "False not quoted")
 
         result = sanitizer.quote_number(None)
-        self.assertEqual(result, '"None"', "None not quoted")
+        self.assertEqual(eval(result), 'None', "None not quoted")
 
         result = sanitizer.quote_number("hello world")
-        self.assertEqual(result, '"hello world"', "String not quoted")
+        self.assertEqual(eval(result), "hello world", "String not quoted")
 
     def test_cast_number(self):
         """Tests the cast_number method"""

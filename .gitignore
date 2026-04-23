@@ -1,7 +1,9 @@
 **/__pycache__
 /config.json
 .venv
+.idea/
 examplelog.txt
+log.txt
 .DS_Store
 **/.DS_Store
 .pytest_cache/

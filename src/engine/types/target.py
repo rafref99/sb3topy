@@ -445,10 +445,6 @@ class Target:
 
     def _update_rect(self, display: Any):
         """Updates the rect to match the sprite's position and orientation"""
-        old_rect = getattr(self.sprite, "rect", None)
-        if old_rect is not None:
-            old_rect = old_rect.copy()
-
         # Rotate the rect properly
         costume = self.costume
         offset = costume.costume['offset'] * (costume.size / 100)
@@ -462,14 +458,6 @@ class Target:
 
         # Move the rect by the stage offset
         self.sprite.rect.move_ip(*display.rect.topleft)
-
-        if (
-            old_rect
-            and old_rect.width
-            and old_rect.height
-            and old_rect != self.sprite.rect
-        ):
-            self.sprite._sb3topy_previous_rect = old_rect
 
         self.sprite.dirty = 1
 
@@ -592,7 +580,7 @@ class Target:
             # __class__ is the Sprite's subclass
             clone = target.__class__(target)
             self._clones.append(clone)  # Shared between targets
-            self.clones.append(clone)
+            target.clones.append(clone)
             group.add(clone.sprite, layer=bottom)
             util.events.send_to(util, clone, "clone_start")
         else:

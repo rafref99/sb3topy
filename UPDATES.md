@@ -120,3 +120,65 @@ This file documents the changes and improvements made during the project rework.
 - Expanded `tests/test_engine_effects.py` to cover ghost render visibility, transparent sprite compositing over the stage, and transparent-border trimming.
 - Added `tests/test_svg_conversion.py` to cover SVG PNG alpha normalization, edge-only color bleed, RGB/RGBA conversion, and opaque edge-background cleanup.
 - Verified the full pytest suite with `PYTHONPATH=src python3 -m pytest -q`.
+
+## [2026-04-23] - Packaging, CI, Logging, and Launcher Updates
+
+### Project Tooling
+- Added `pyproject.toml` with package metadata, setuptools package discovery, package data, optional dependency groups, the `sb3topy` console script, and pytest configuration for the `src/` layout.
+- Added a GitHub Actions test workflow for Python 3.12 on macOS using dummy SDL audio/video drivers.
+- Updated `.gitignore` to ignore `.DS_Store`, pytest/cache files, coverage output, build artifacts, egg-info metadata, and local test output.
+- Added `TODO.md` as an active improvement backlog and removed completed items from it as they were finished.
+- Fixed package metadata so CI can install the project: `requires-python` now uses a valid PEP 508 specifier and the prerelease version uses valid PEP 440 syntax.
+- Tightened dependency ranges in `requirements.txt` and aligned the aggregate optional dependency group in `pyproject.toml`.
+- Replaced production parser/specmap `assert` usage with explicit exceptions or logged recoverable fallbacks.
+- Reset CLI argument parsing to the package-loaded configuration baseline before applying new arguments, preventing stale project URL/path/autorun state from leaking between repeated `main.main([...])` calls in one process.
+- Switched generated string literal quoting to `repr(str(...))` so quotes, backslashes, carriage returns, and trailing newlines round-trip as valid Python literals.
+
+### Documentation
+- Updated README testing instructions to use editable install and plain `python3 -m pytest -q` instead of requiring manual `PYTHONPATH=src`.
+- Documented the persistent GUI example download folder under `~/sb3topy_examples/`, including the per-example subfolder behavior.
+- Added README instructions for the new platform-specific GUI launchers.
+- Updated project author/copyright metadata to use the current maintainer name.
+
+### GUI Design
+- Added a shared GUI style module for consistent app colors, surfaces, typography, buttons, entries, section frames, and page headers.
+- Redesigned the main window sizing and sidebar navigation with clearer branding, spacing, selected states, and a more modern dark/light adaptive palette.
+- Reworked the Convert tab into clear Source and Destination sections with a stronger primary conversion action.
+- Added native drag-and-drop support for `.sb3` and `.zip` files on the Convert input field when `tkinterdnd2` is installed.
+- Refreshed the Examples tab with a structured projects list, larger preview area, consistent action buttons, and improved link/description styling.
+- Refreshed the Output tab with a page header, status indicator, styled log panel, and consistent export/debug controls.
+- Applied the shared section styling across Settings tabs to make dense configuration groups easier to scan.
+- Polished Settings tab contrast and alignment: inactive tabs are more legible, the configuration Save/Load actions align together, and selected sidebar hover now stays in the blue palette.
+
+### Runtime and Conversion Logging
+- Replaced runtime diagnostic `print()` calls with module loggers across engine utility, costume, list, pen, target, and generated engine config code.
+- Removed stray stdout output from command-based SVG conversion.
+- Changed the generated `data_showvariable` fallback from printing variable values to a no-op placeholder so generated projects keep stdout predictable.
+- Made the renderer explicitly full-frame: removed dirty-rect timing threshold configuration, stopped calling Pygame repaint helpers, and switched the frame presentation path to `pg.display.flip()`.
+- Fixed Stage-created clones of other sprites being registered under the Stage instead of the cloned target, which could leave clones uninitialized and crash rendering after input-triggered clone creation.
+
+### Launchers
+- Added `run_gui_macos.command`, an executable macOS launcher that runs the GUI from a source checkout.
+- Added `run_gui_windows.cmd`, a Windows launcher that runs the GUI from a source checkout.
+- Both launchers set `PYTHONPATH` to the local `src/` directory and print dependency guidance if startup fails.
+- Both launchers now check for required Python packages before startup and prompt to install missing dependencies from `requirements.txt`.
+- Both launchers now verify Python 3.12 before dependency checks and stop with a clear message when another Python version is selected.
+
+### Configuration Isolation
+- Added an immutable `ConfigSnapshot` helper and started threading captured config state through the main conversion path.
+- `main.run`, unpack/extract/download/asset conversion, engine config generation, and parser type-resolution now use a per-run snapshot instead of reading mutable globals directly.
+- Kept module-level config globals as a compatibility layer for existing GUI and API callers while reducing cross-run leakage risk.
+
+### Testing
+- Added `tests/test_config_isolation.py` to cover repeated CLI parsing with different project paths and autorun settings.
+- Added snapshot-isolation tests to verify parser type-resolution and autorun decisions use the captured config for the current run.
+- Added `tests/test_parser_validation.py` to cover malformed blockmaps, mutation registration errors, existing-hat fallback behavior, and invalid type graph inputs.
+- Added a regression test for Stage-created clones of another sprite so those clones are updated before rendering.
+- Added a renderer regression test to verify the full-frame presentation path uses `pg.display.flip()` instead of dirty-rect updates.
+- Added tests for dropped project path parsing, including paths with spaces and multiple dropped files.
+- Verified the refreshed GUI modules compile and the existing examples GUI test still passes.
+- Expanded sanitizer tests to compile and evaluate hostile-looking string literals, verifying they remain inert generated Python strings.
+- Verified `python3 -m pip install -e . --no-deps` builds the editable package successfully after metadata fixes.
+- Verified `python3 -m pytest -q` passes without manually setting `PYTHONPATH`.
+- Verified `python3 -m pytest -q -W error::DeprecationWarning` passes after the Pygame API cleanup.
+- Verified `sh -n run_gui_macos.command` passes for the macOS launcher script.

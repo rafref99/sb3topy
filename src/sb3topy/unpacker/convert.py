@@ -39,32 +39,34 @@ __all__ = ('convert_assets', 'Convert')
 logger = logging.getLogger(__name__)
 
 
-def convert_assets(manifest: project.Manifest):
+def convert_assets(manifest: project.Manifest, convert_config=None):
     """
     Converts all assets in project to a supported format
     """
     logger.info("Converting project assets...")
-    Convert(manifest)
+    Convert(manifest, convert_config)
 
 
 class Convert:
     """Converts all assets in project to a supported format"""
 
-    def __init__(self, manifest: project.Manifest):
+    def __init__(self, manifest: project.Manifest, convert_config=None):
+        self.config = convert_config or config.snapshot_config()
         self.output_dir = manifest.output_dir
 
-        workers = pool.ThreadPool(config.CONVERT_THREADS)
+        workers = pool.ThreadPool(self.config.CONVERT_THREADS)
         logger.debug("Created %i worker threads for asset conversion.",
-                     config.CONVERT_THREADS)
+                     self.config.CONVERT_THREADS)
 
         # Treat a timeout of 0 as no timeout
-        if config.CONVERT_TIMEOUT == 0 or isinstance(config.CONVERT_TIMEOUT, str):
-            config.CONVERT_TIMEOUT = None
+        self.convert_timeout = self.config.CONVERT_TIMEOUT
+        if self.convert_timeout == 0 or isinstance(self.convert_timeout, str):
+            self.convert_timeout = None
 
         # Get an SVG conversion function
         self.convert_svg_func = None
-        if config.CONVERT_COSTUMES:
-            self.convert_svg_func = convert_svg.get_svg_function()
+        if self.config.CONVERT_COSTUMES:
+            self.convert_svg_func = convert_svg.get_svg_function(self.config)
 
         # Convert the SVGs
         if self.convert_svg_func:
@@ -85,9 +87,9 @@ class Convert:
             ))
 
         # Convert all sounds
-        if config.CONVERT_SOUNDS:
+        if self.config.CONVERT_SOUNDS:
             # Verify the conversion method is available
-            command = shlex.split(config.MP3_COMMAND)
+            command = shlex.split(self.config.MP3_COMMAND)
             if shutil.which(command[0]) is None:
                 logger.error((
                     "MP3 conversion is enabled but '%s' "
@@ -165,13 +167,13 @@ class Convert:
                               md5ext.rstrip('.mp3') + '-mp3.wav')
 
         # Possibly don't reconvert the asset
-        if path.isfile(save_path) and not config.RECONVERT_SOUNDS:
+        if path.isfile(save_path) and not self.config.RECONVERT_SOUNDS:
             logger.debug(
                 "Skipping conversion of mp3 '%s' (already converted)", md5ext)
             return new_md5ext
 
         # Get the conversion command
-        cmd_str = config.MP3_COMMAND.format(
+        cmd_str = self.config.MP3_COMMAND.format(
             INPUT=shlex.quote(asset_path),
             OUTPUT=shlex.quote(save_path)
         )
@@ -180,7 +182,7 @@ class Convert:
         try:
             logger.debug("Converting mp3 '%s' to wav", md5ext)
             result = subprocess.run(shlex.split(cmd_str), check=True, capture_output=True,
-                                    text=True, timeout=config.CONVERT_TIMEOUT)
+                                    text=True, timeout=self.convert_timeout)
 
         except subprocess.CalledProcessError as error:
             logger.error("Failed to convert mp3 '%s':\n%s\n%s\n",
@@ -208,14 +210,14 @@ class Convert:
 
         # Some blank svg files fail to convert with cairosvg
         # Use a fallback pre-converted png image instead
-        if md5ext in config.BLANK_SVG_HASHES:
+        if md5ext in self.config.BLANK_SVG_HASHES:
             logger.debug("Using fallback image for blank svg %s", md5ext)
-            return convert_svg.fallback_image("", output_dir, md5ext)
+            return convert_svg.fallback_image("", output_dir, md5ext, self.config)
 
         # Convert the svg with the configured method
         new_md5ext = self.convert_svg_func(svg_path, output_dir, md5ext)
 
         # Use a fallback image if conversion failed
         if new_md5ext is None:
-            return convert_svg.fallback_image("", output_dir, md5ext)
+            return convert_svg.fallback_image("", output_dir, md5ext, self.config)
         return new_md5ext

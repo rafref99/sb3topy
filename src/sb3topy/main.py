@@ -40,21 +40,23 @@ def main(args=None):
     return run()
 
 
-def run():
+def run(run_config=None):
     """
     Converts the project using the settings saved in config
     """
+    if run_config is None:
+        run_config = config.snapshot_config()
 
     # Initialize the manifest
-    manifest = project.Manifest(config.OUTPUT_PATH)
+    manifest = project.Manifest(run_config.OUTPUT_PATH)
 
     # Download the project from the internet
-    if config.PROJECT_URL:
-        sb3 = unpacker.download_project(manifest, config.PROJECT_URL)
+    if run_config.PROJECT_URL:
+        sb3 = unpacker.download_project(manifest, run_config.PROJECT_URL, run_config)
 
     # Extract the project from an sb3
-    elif config.PROJECT_PATH:
-        sb3 = unpacker.extract_project(manifest, config.PROJECT_PATH)
+    elif run_config.PROJECT_PATH:
+        sb3 = unpacker.extract_project(manifest, run_config.PROJECT_PATH, run_config)
 
     else:
         logger.error("A project url/path was not provided.")
@@ -65,20 +67,20 @@ def run():
         return False
 
     # Save a debug json
-    if config.DEBUG_JSON:
-        project.save_json(sb3, manifest, config.FORMAT_JSON)
+    if run_config.DEBUG_JSON:
+        project.save_json(sb3, manifest, run_config.FORMAT_JSON)
 
     # Convert project assets
-    if config.CONVERT_ASSETS:
-        unpacker.convert_assets(manifest)
+    if run_config.CONVERT_ASSETS:
+        unpacker.convert_assets(manifest, run_config)
 
     # Copy engine files
-    if config.COPY_ENGINE:
-        packer.copy_engine(manifest)
+    if run_config.COPY_ENGINE:
+        packer.copy_engine(manifest, run_config)
 
-    if config.PARSE_PROJECT:
+    if run_config.PARSE_PROJECT:
         # Parse the project
-        code = parser.parse_project(sb3, manifest)
+        code = parser.parse_project(sb3, manifest, run_config)
 
         # Save the project's code
         packer.save_code(manifest, code)
@@ -86,7 +88,7 @@ def run():
         logger.info("Finished converting project. Saved in '%s'",
                     manifest.output_dir)
 
-    if config.AUTORUN:
+    if run_config.AUTORUN:
         if not packer.run_project(manifest.output_dir):
             return False
 
@@ -95,13 +97,13 @@ def run():
     return True
 
 
-def _run_worker(queue, config_data):
+def _run_worker(queue, run_config):
     """
     Runs and attaches a QueueHandler to the log.
     """
     try:
-        # Load configuration
-        config.set_config(config_data)
+        # Keep module globals aligned for compatibility-only callers.
+        config.set_config(run_config.to_dict(modifiable_only=True))
 
         # Setup the log to use the queue
         pkg_log.config_logger()
@@ -109,7 +111,7 @@ def _run_worker(queue, config_data):
         logger.info("Using Python interpreter: %s", sys.executable)
 
         # Run the converter
-        run()
+        run(run_config)
 
     # Catch any errors so they can be shown in the GUI
     except Exception:
@@ -130,10 +132,10 @@ def run_mp():
 
     The Queue is tied to a QueueHandler to get log messages.
     """
-    config_data = config.get_config()
+    run_config = config.snapshot_config()
     queue = Queue(-1)
     process = Process(target=_run_worker, args=(
-        queue, config_data), daemon=True)
+        queue, run_config), daemon=True)
     process.start()
 
     return process, queue

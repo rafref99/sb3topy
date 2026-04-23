@@ -22,6 +22,7 @@ except ImportError:
 from .. import config
 from .. import packer
 from ..parser import sanitizer
+from . import style
 
 logger = logging.getLogger(__name__)
 
@@ -101,37 +102,46 @@ class ExamplesFrame(ctk.CTkFrame):
     """
 
     def __init__(self, app, **kwargs):
-        super().__init__(app, **kwargs)
+        super().__init__(app, **kwargs, fg_color=style.APP_BG)
         self.app = app
 
+        header = style.page_header(
+            self, "Examples",
+            "Download curated Scratch projects into your local examples folder.")
+
         # Create components
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        list_frame = style.section(content, "Projects")
         self.examples_list = ctk.StringVar()
         # CustomTkinter does not have a Listbox, using tk.Listbox for now but styled
         self.listbox = tk.Listbox(
-            self, height=20, listvariable=self.examples_list,
-            bg="#2b2b2b", fg="#ffffff", selectbackground="#1f538d",
-            borderwidth=0, highlightthickness=0, font=("TkDefaultFont", 11))
+            list_frame, height=20, listvariable=self.examples_list,
+            bg="#111827", fg="#f8fafc", selectbackground="#2563eb",
+            selectforeground="#ffffff", activestyle="none",
+            borderwidth=0, highlightthickness=0, font=("TkDefaultFont", 12))
 
-        project_frame = ctk.CTkFrame(self)
+        project_frame = style.section(content)
 
-        self.thumbnail = ctk.CTkLabel(project_frame, text="Select a project")
+        self.thumbnail = ctk.CTkLabel(
+            project_frame, text="Select a project", text_color=style.MUTED,
+            fg_color=style.SURFACE_ALT, corner_radius=8)
 
         self.download_link_raw = ""
         self.download_link = ctk.StringVar(self.app, name="PROJECT_URL")
 
         download_frame = ctk.CTkFrame(project_frame, fg_color="transparent")
-        download_box = ctk.CTkEntry(
+        download_box = style.entry(
             download_frame, textvariable=self.download_link)
-        self.download_button = ctk.CTkButton(
+        self.download_button = style.primary_button(
             download_frame, text="Download",
             command=self.download_project, width=100)
-        self.download_run_button = ctk.CTkButton(
+        self.download_run_button = style.success_button(
             download_frame, text="Download & Run",
             command=self.download_run_project, width=120)
-        self.run_button = ctk.CTkButton(
+        self.run_button = style.success_button(
             download_frame, text="Run",
             command=self.run_downloaded_project, width=100)
-        self.redownload_button = ctk.CTkButton(
+        self.redownload_button = style.secondary_button(
             download_frame, text="Redownload",
             command=self.download_project, width=110)
 
@@ -143,33 +153,38 @@ class ExamplesFrame(ctk.CTkFrame):
         self.json_sha = ctk.Variable(self.app, name="JSON_SHA")
 
         info_frame = ctk.CTkFrame(project_frame, fg_color="transparent")
-        user_label = ctk.CTkLabel(info_frame, text="Made by")
+        user_label = ctk.CTkLabel(
+            info_frame, text="Made by", text_color=style.MUTED)
         user_link = Hyperlink(
             info_frame, self.userlink, textvariable=self.username)
         project_link = Hyperlink(
             info_frame, self.project_link, textvariable=self.project_viewer)
         description = ctk.CTkLabel(
-            info_frame, textvariable=self.project_desc, wraplength=400, justify="left")
+            info_frame, textvariable=self.project_desc, wraplength=520,
+            justify="left", text_color=style.TEXT)
         copyright_label = Hyperlink(
             info_frame, ctk.StringVar(
                 value="https://creativecommons.org/licenses/by-sa/2.0/"),
             text="CC BY-SA-2.0")
 
-        # Grid everything
-        self.listbox.grid(column=0, row=0, sticky='NSW', pady=10, padx=10)
+        header.grid(column=0, row=0, sticky="ew", padx=28, pady=(26, 18))
+        content.grid(column=0, row=1, sticky="nsew", padx=28, pady=(0, 28))
 
-        project_frame.grid(column=1, row=0, sticky='NSEW', pady=10, padx=(0, 10))
+        list_frame.grid(column=0, row=0, sticky='NSEW', padx=(0, 14))
+        self.listbox.grid(column=0, row=1, sticky='NSEW', pady=(0, 16), padx=16)
 
-        self.thumbnail.grid(column=0, row=0, sticky='NS', pady=10)
+        project_frame.grid(column=1, row=0, sticky='NSEW')
 
-        download_frame.grid(column=0, row=1, sticky='NEW', padx=10)
+        self.thumbnail.grid(column=0, row=0, sticky='NSEW', padx=16, pady=16)
+
+        download_frame.grid(column=0, row=1, sticky='NEW', padx=16)
         download_box.grid(column=0, row=0, sticky='WE', padx=2)
         self.download_button.grid(column=1, row=0, sticky='NWE', padx=2)
         self.download_run_button.grid(
             column=2, row=0, sticky='NWE', padx=2)
         download_frame.columnconfigure(0, weight=1)
 
-        info_frame.grid(column=0, row=2, sticky='NEW', padx=10, pady=10)
+        info_frame.grid(column=0, row=2, sticky='NEW', padx=16, pady=16)
         user_label.grid(column=0, row=1, sticky='NW')
         user_link.grid(column=1, row=1, sticky='NW', padx=5)
         copyright_label.grid(column=2, row=1, sticky='NE')
@@ -182,8 +197,15 @@ class ExamplesFrame(ctk.CTkFrame):
         # project_frame.columnconfigure(0, minsize=480*app.scale)
         # project_frame.rowconfigure(0, minsize=360*app.scale)
 
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(1, weight=1)
+        project_frame.columnconfigure(0, weight=1)
+        project_frame.rowconfigure(0, weight=1)
+        content.columnconfigure(0, minsize=260)
+        content.columnconfigure(1, weight=1)
+        content.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
 
         # Bind events
         self.listbox.bind("<<ListboxSelect>>", self.listbox_changed)
@@ -338,7 +360,7 @@ class Hyperlink(ctk.CTkLabel):
     """A label which goes to a webpage when clicked"""
 
     def __init__(self, parent, url, **kwargs):
-        super().__init__(parent, text_color="#0000EE", cursor="hand2", **kwargs)
+        super().__init__(parent, text_color=style.ACCENT, cursor="hand2", **kwargs)
         self.url = url
 
         self.bind("<Enter>", self.mouse_enter)

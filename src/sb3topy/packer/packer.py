@@ -32,12 +32,14 @@ def save_code(manifest: project.Manifest, code: str):
         code_file.write(code)
 
 
-def copy_engine(manifest: project.Manifest):
+def copy_engine(manifest: project.Manifest, packer_config=None):
     """
     Copies the engine files into the project's directory
 
     If the engine files already exist, they will
     """
+    if packer_config is None:
+        packer_config = config.snapshot_config()
 
     # Get the path to copy from and to
     read_dir = path.join(path.dirname(__file__), "..", "..", "engine")
@@ -50,18 +52,18 @@ def copy_engine(manifest: project.Manifest):
 
     # Delete and copy the engine files
     if path.isdir(save_dir):
-        if config.OVERWRITE_ENGINE:
+        if packer_config.OVERWRITE_ENGINE:
             logger.info("Overwriting engine files at '%s'", save_dir)
             shutil.rmtree(save_dir)
             shutil.copytree(read_dir, save_dir, )
-            create_config(save_dir)
+            create_config(save_dir, packer_config)
         else:
             logger.info(
                 "Did not copy engine files; OVERWRITE_ENGINE disabled.")
     else:
         logger.info("Copying engine files to '%s'", save_dir)
         shutil.copytree(read_dir, save_dir)
-        create_config(save_dir)
+        create_config(save_dir, packer_config)
 
     # Create a warning message
     warn_path = path.join(save_dir, "WARNING.txt")
@@ -76,15 +78,18 @@ def copy_engine(manifest: project.Manifest):
         ))
 
 
-def create_config(engine_dir):
+def create_config(engine_dir, packer_config=None):
     """Creates a config.py file for the engine"""
+    if packer_config is None:
+        packer_config = config.snapshot_config()
+
     # Read a formatable spec file
     spec_path = path.join(path.dirname(__file__), "config.txt")
     with open(spec_path, 'r') as spec_file:
         spec_data = spec_file.read()
 
     # Format the spec file into Python code
-    config_data = spec_data.format(**config.__dict__)
+    config_data = spec_data.format(**packer_config.to_dict())
 
     # Save the config data
     config_path = path.join(engine_dir, "config.py")

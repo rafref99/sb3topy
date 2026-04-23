@@ -20,10 +20,6 @@ Timing Settings:
     WARP_TIME: How long custom blocks are allowed to run without a
         screen refresh (seconds).
 
-    FLIP_THRESHOLD: How long a screen redraw should take before Pygame
-        should switch to flipping the entire screen (seconds.)
-    FLIP_THRESHOLD = 1000 / FLIP_THRESHOLD_INV
-
 Display Settings:
     STAGE_SIZE: The size of the stage (width, height)
 
@@ -109,8 +105,6 @@ TARGET_FPS = 31
 TURBO_MODE = False
 WORK_TIME = 1 / 60
 WARP_TIME = 0.5
-
-FLIP_THRESHOLD = 1000 / 40
 
 # Display Settings
 STAGE_SIZE = (480, 360)
