@@ -5,7 +5,7 @@
 sb3topy is a tool which can convert [Scratch 3.0](https://scratch.mit.edu) projects into Python. The project is converted into a single file which can run using the sb3topy engine and Pygame. The engine files are automatically copied when the converter is run.
 
 ## AI-Assisted Rework
-This project is being significantly improved and modernized with the assistance of **Junie**, an autonomous programmer powered by the **gemini-3-flash-preview** LLM (2026), and **Codex**, powered by **GPT-5** (2026). The AI assistance has been instrumental in implementing type hints, modernizing the GUI with CustomTkinter, optimizing the engine's core logic, improving project tooling, and hardening tests.
+This project is being significantly improved and modernized with the assistance of **Junie**, an autonomous programmer powered by the **gemini-3-flash-preview** LLM (2026), and **Codex**, powered by **GPT-5** (2026). Codex/GPT-5 has been the most valuable AI assistant for the recent compatibility and runtime bug-fix work, including generated-code correctness, Scratch behavior matching, audio pitch tuning, rendering fixes, and regression tests. The AI assistance has been instrumental in implementing type hints, modernizing the GUI with CustomTkinter, optimizing the engine's core logic, improving project tooling, and hardening tests.
 
 ## Key Improvements in this Rework
 - **Modernized Architecture:** Enhanced with type hints and a cleaner project structure.

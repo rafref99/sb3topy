@@ -1,4 +1,5 @@
 import os
+import asyncio
 import unittest
 from unittest import mock
 
@@ -13,6 +14,7 @@ from engine.render import Render
 from engine.types.target import Target
 from engine.types.costumes import Costumes
 from engine.types.pen import Pen
+from engine.types.sounds import Sounds
 
 
 class _Copyable:
@@ -102,6 +104,45 @@ class CostumeEffectsTests(unittest.TestCase):
         costumes.clear_effects()
         image = costumes.get_image(type("Display", (), {"scale": 1})(), 90)
         self.assertEqual(image.get_at((0, 0)).a, 255)
+
+    def test_special_costume_menu_values(self):
+        image = pg.Surface((4, 4), pg.SRCALPHA)
+        costumes = []
+        costume_dict = {}
+        for index in range(3):
+            asset = {
+                "name": f"costume{index + 1}",
+                "image": image,
+                "center": (2, 2),
+                "scale": 1,
+                "number": index + 1,
+            }
+            costumes.append(asset)
+            costume_dict[asset["name"]] = asset
+
+        costumes = Costumes(
+            0,
+            100,
+            "don't rotate",
+            costumes,
+            (costume_dict, {}),
+        )
+
+        costumes.switch("previous costume")
+        self.assertEqual(costumes.number, 3)
+
+        costumes.switch("next costume")
+        self.assertEqual(costumes.number, 1)
+
+        costumes.switch(3)
+        self.assertEqual(costumes.number, 3)
+
+        costumes.switch(4)
+        self.assertEqual(costumes.number, 1)
+
+        with mock.patch("engine.types.costumes.random.randrange", return_value=1):
+            costumes.switch("random costume")
+        self.assertEqual(costumes.number, 2)
 
     def test_render_keeps_stage_visible_through_transparent_sprite_pixels(self):
         sprite = pg.sprite.DirtySprite()
@@ -237,6 +278,22 @@ class CostumeEffectsTests(unittest.TestCase):
         self.assertEqual(len(_OtherCloneTarget.clones), 1)
         self.assertIs(group.added[0][0].target, _OtherCloneTarget.clones[0])
         self.assertEqual(sent_events, [(_OtherCloneTarget.clones[0], "clone_start")])
+
+    def test_sound_pitch_effect_is_reduced_before_resampling(self):
+        sound = mock.Mock()
+        sounds = Sounds(100, [sound], {"engine": sound})
+        sounds.set_effect("pitch", 100)
+
+        async def play_sound():
+            with (
+                mock.patch.object(sounds, "_apply_pitch", return_value=sound) as apply_pitch,
+                mock.patch.object(pg.mixer, "find_channel", return_value=None),
+            ):
+                await sounds.play("engine")
+            return apply_pitch
+
+        apply_pitch = asyncio.run(play_sound())
+        apply_pitch.assert_called_once_with(sound, 65)
 
 
 if __name__ == "__main__":

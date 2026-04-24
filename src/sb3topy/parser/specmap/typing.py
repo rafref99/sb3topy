@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 SWITCHES: Dict[str, Callable[[Any, Any], Any]] = {}
 
 
+def _field_id_or_name(field):
+    """Return the Scratch ID from a field tuple/list when available."""
+    if isinstance(field, (list, tuple)):
+        return field[1] if len(field) > 1 else field[0]
+    return field
+
+
 def get_literal_type(value):
     """Attempts to determine the type of a literal value"""
 
@@ -66,12 +73,12 @@ def get_input_type(target, value):
     if 4 <= value[0] <= 10:
         return get_literal_type(value[1])
 
-    # 12 Variable
+    # 12 Variable: [12, name, id]. Prefer the id when Scratch provides it.
     if value[0] == 12:
-        var = target.vars.get_var('var', value[1])
+        var = target.vars.get_var('var', value[2] if len(value) > 2 else value[1])
         return target.digraph.get_node(var.node.id_tuple)
 
-    # 13 List reporter
+    # 13 List reporter: [13, name, id]. Prefer the id when Scratch provides it.
     if value[0] == 13:
         # TODO StaticList reporter typing?
         return 'str'
@@ -123,5 +130,5 @@ def arg_reporter(target, block):
 @switch("data_itemoflist")
 def list_item(target, block):
     """Determines the type of a list item reporter"""
-    name = block['fields']['LIST'][0]
+    name = _field_id_or_name(block['fields']['LIST'])
     return target.vars.get_var('list', name).node

@@ -8,12 +8,25 @@ TODO Are names such as 'x position' are still marked as universals?
 """
 
 import logging
+from typing import Dict
 
 from .. import config
 from . import sanitizer, specmap, typing
 from .naming import Identifiers
 
 logger = logging.getLogger(__name__)
+
+
+def _has_prefix(name: str, prefix: str) -> bool:
+    """Return whether a generated variable name already has prefix_."""
+    return not prefix or name == prefix or name.startswith(prefix + '_')
+
+
+def _field_id_or_name(field):
+    """Return the Scratch ID from a field tuple/list when available."""
+    if isinstance(field, (list, tuple)):
+        return field[1] if len(field) > 1 else field[0]
+    return field
 
 
 class Variable:
@@ -87,9 +100,13 @@ class Variables:
         global_vars: Identifiers instance used to name and contain
             variables owned by the stage
 
-        universal_vars: Identifiers instance used to contain variable
+    universal_vars: Identifiers instance used to contain variable
             names which should be kept consistent across sprites, such
             as those used in the sensing_of block.
+
+        all_ids: Scratch variable/list IDs seen anywhere in the project.
+            This is a fallback for copied scripts that keep an ID from
+            another sprite but no longer declare that variable locally.
 
     Attributes:
         local_vars: Identifiers instance used to name and contain
@@ -100,17 +117,32 @@ class Variables:
 
     global_vars: Identifiers = None
     universal_vars: Identifiers = None
+    global_ids: Dict[str, str] = {}
+    all_ids: Dict[str, str] = {}
+
+    @classmethod
+    def reset(cls):
+        """Reset project-scoped variable registries before parsing a project."""
+        cls.global_vars = None
+        cls.universal_vars = None
+        cls.global_ids = {}
+        cls.all_ids = {}
 
     def __init__(self, target_name, is_stage):
         # Initialize class attributes
         if self.global_vars is None:
             Variables.global_vars = Identifiers()
             Variables.universal_vars = Identifiers()
+            Variables.global_ids = {}
+            Variables.all_ids = {}
 
         if is_stage:
             self.local_vars = self.global_vars
+            self.local_ids = self.global_ids
         else:
             self.local_vars = Identifiers()
+            self.local_ids = {}
+        self.digraph = None
 
         # Save for creating tuple_ids
         self.target_name = target_name
@@ -123,24 +155,38 @@ class Variables:
         instance has been created for every target
         """
 
+        self.digraph = digraph
+
         # Update universal names
         self.local_vars.set.update(self.universal_vars.set)
 
         # Read variables
-        for name, value, *_ in target['variables'].values():
+        for varid, (name, value, *_) in target['variables'].items():
             self.create_local("var", name, digraph, value)
+            self.local_ids[varid] = name
+            self.all_ids.setdefault(varid, name)
 
         # Read lists
-        for name, values in target['lists'].values():
+        for listid, (name, values) in target['lists'].items():
             self.create_local('list', name, digraph, values)
+            self.local_ids[listid] = name
+            self.all_ids.setdefault(listid, name)
 
     def get_reference(self, prefix, name):
         """
         Gets a variable reference,
         eg. self.var_x or util.sprites.stage.var_x
         """
+        # Resolve ID if necessary
+        if name in self.local_ids:
+            name = self.local_ids[name]
+        elif name in self.global_ids:
+            name = self.global_ids[name]
+        elif name in self.all_ids:
+            name = self.all_ids[name]
+
         # Ensure the name starts with the prefix
-        if not name.startswith(prefix):
+        if not _has_prefix(name, prefix):
             name = prefix + '_' + name
 
         # Check if a local variable exists with the name
@@ -161,8 +207,16 @@ class Variables:
         """
         Gets the type for a global or local variable
         """
+        # Resolve ID if necessary
+        if name in self.local_ids:
+            name = self.local_ids[name]
+        elif name in self.global_ids:
+            name = self.global_ids[name]
+        elif name in self.all_ids:
+            name = self.all_ids[name]
+
         # Ensure the name starts with the prefix
-        if not name.startswith(prefix):
+        if not _has_prefix(name, prefix):
             name = prefix + '_' + name
 
         # Check if a local variable exists with the name
@@ -184,8 +238,14 @@ class Variables:
         Gets the identifier for a local variable
         No self. prefix is added.
         """
+        # Resolve ID if necessary
+        if name in self.local_ids:
+            name = self.local_ids[name]
+        elif name in self.all_ids:
+            name = self.all_ids[name]
+
         # Ensure the name starts with the prefix
-        if not name.startswith(prefix):
+        if not _has_prefix(name, prefix):
             name = prefix + '_' + name
 
         # Check if a local variable exists with the name
@@ -202,8 +262,18 @@ class Variables:
         """
         Gets a Variable object, either global or local
         """
+        used_project_id_fallback = False
+        # Resolve ID if necessary
+        if name in self.local_ids:
+            name = self.local_ids[name]
+        elif name in self.global_ids:
+            name = self.global_ids[name]
+        elif name in self.all_ids:
+            name = self.all_ids[name]
+            used_project_id_fallback = True
+
         # Ensure the name starts with the prefix
-        if not name.startswith(prefix):
+        if not _has_prefix(name, prefix):
             name = prefix + '_' + name
 
         # Check if a local variable exists with the name
@@ -215,15 +285,16 @@ class Variables:
             return self.global_vars.dict[name]
 
         # This should not normally occur, but can be handled
-        logger.warning("Unregistered var '%s'", name)
+        if not used_project_id_fallback:
+            logger.warning("Unregistered var '%s'", name)
 
         # Create a new local variable
-        return self.create_local(prefix, name, typing.DiGraph())
+        return self.create_local(prefix, name, self.digraph or typing.DiGraph())
 
     def create_local(self, prefix, name, digraph, initial_value=None):
         """Creates a safe identifier name"""
         # Ensure the name starts with the prefix
-        if not name.startswith(prefix):
+        if not _has_prefix(name, prefix):
             name = prefix + '_' + name
 
         # Verify the variable doesn't already exist
@@ -287,7 +358,7 @@ class Variables:
     def mark_universal(cls, name):
         """Saves a name as a universal identifier"""
         # Ensure the name starts with the prefix
-        if not name.startswith('var'):
+        if not _has_prefix(name, 'var'):
             name = 'var' + '_' + name
 
         # Verify the name isn't already marked
@@ -311,7 +382,7 @@ class Variables:
     def get_universal(cls, name):
         """Gets a universal identifier from a name"""
         # Ensure the name starts with the prefix
-        if not name.startswith('var'):
+        if not _has_prefix(name, 'var'):
             name = 'var_' + name
 
         # Get the universal identifier
@@ -327,16 +398,21 @@ class Variables:
         """Parses a data_setvariableto block for type guessing"""
         input_type = specmap.get_input_type(
             target, block['inputs']['VALUE'])
-        self.get_var('var', block['fields']
-                     ['VARIABLE'][0]).mark_set(input_type)
+        self.get_var(
+            'var',
+            _field_id_or_name(block['fields']['VARIABLE'])
+        ).mark_set(input_type)
 
     def mark_changed(self, block):
         """Parses a data_changevariableby block for type guessing """
-        self.get_var('var', block['fields']['VARIABLE'][0]).mark_changed()
+        self.get_var(
+            'var',
+            _field_id_or_name(block['fields']['VARIABLE'])
+        ).mark_changed()
 
     def mark_modified(self, target, block):
         """Marks a list as modified by block"""
-        var = self.get_var('list', block['fields']['LIST'][0])
+        var = self.get_var('list', _field_id_or_name(block['fields']['LIST']))
         var.mark_modified()
 
         if block['opcode'] in ('data_addtolist', 'data_insertatlist',
@@ -347,4 +423,7 @@ class Variables:
 
     def mark_indexed(self, block):
         """Marks a list as indexed by block"""
-        self.get_var('list', block['fields']['LIST'][0]).mark_indexed()
+        self.get_var(
+            'list',
+            _field_id_or_name(block['fields']['LIST'])
+        ).mark_indexed()

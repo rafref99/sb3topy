@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 INDENT_PAT = r"(?m)^(\s+)\{(\w+)\}"
 
 
+def _format_switch_field(value):
+    """Normalize Scratch menu text for blockmap switch keys."""
+    return value.lower().replace(' #', '').replace('#', '').replace(' ', '_')
+
+
 class BlockMap(NamedTuple):
     """
     Tuple which represents the base data of a block.
@@ -106,7 +111,7 @@ class BlockMap(NamedTuple):
         # Read and standardize fields in the block
         fields = {}
         for field, value in block['fields'].items():
-            fields[field] = value[0].lower().replace(' ', '_')
+            fields[field] = _format_switch_field(value[0])
 
         return self.switch.format(**fields)
 

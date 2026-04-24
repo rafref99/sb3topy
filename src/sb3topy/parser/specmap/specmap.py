@@ -48,13 +48,13 @@ def parse_input(blocks, value):
             # Just a block
             return 'blockid', value
 
-    # 12 Variable
+    # 12 Variable: [12, name, id]. Prefer the id when Scratch provides it.
     if value[0] == 12:
-        return 'variable', value[1]
+        return 'variable', value[2] if len(value) > 2 else value[1]
 
-    # 13 List
+    # 13 List: [13, name, id]. Prefer the id when Scratch provides it.
     if value[0] == 13:
-        return 'list_reporter', value[1]
+        return 'list_reporter', value[2] if len(value) > 2 else value[1]
 
     # Default to a literal
     # 4-8 Number, 9-10 String, # 11 Broadcast

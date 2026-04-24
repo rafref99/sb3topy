@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 MUTATIONS = {}
 
 
+def _field_id_or_name(field):
+    """Return the Scratch ID from a field tuple/list when available."""
+    if isinstance(field, (list, tuple)):
+        return field[1] if len(field) > 1 else field[0]
+    return field
+
+
 def get_mutation(opcode):
     """Find mutation given an opcode"""
     return MUTATIONS.get(opcode)
@@ -93,8 +100,12 @@ def proc_call(block, target, _):
         argid): value for argid, value in block['inputs'].items()}
 
     # Get the argument list for the block
-    args = {clean_name: prototype.get_type(
-        arg_name) for arg_name, clean_name in prototype.args.items()}
+    args = {}
+    for arg_name, clean_name in prototype.args.items():
+        if _is_blank_literal_input(block['inputs'].get(clean_name)):
+            args[clean_name] = 'any'
+        else:
+            args[clean_name] = prototype.get_type(arg_name)
 
     # Create arg code formatted by the BlockMap
     # Eg. {input1}, {input2}, ...
@@ -107,6 +118,18 @@ def proc_call(block, target, _):
 
     # Create the block
     return bm.BlockMap('stack', args, code, {})
+
+
+def _is_blank_literal_input(value):
+    """Return True for Scratch's empty text shadow literal."""
+    if value is None:
+        return False
+
+    # Scratch wraps some shadow values as [1, [10, ""]].
+    if value[0] == 1 and isinstance(value[1], list):
+        value = value[1]
+
+    return len(value) > 1 and value[0] in range(4, 12) and value[1] == ''
 
 
 @mutation('argument_reporter_string_number')
@@ -143,7 +166,7 @@ def proc_arg_bool(block, target, blockmap):
 def var_get(block, target, _):
     """Type switch for a variable reporter"""
     return bm.BlockMap(
-        target.vars.get_type('var', block['fields']['VARIABLE'][0]),
+        target.vars.get_type('var', _field_id_or_name(block['fields']['VARIABLE'])),
         {'VARIABLE': 'variable'}, '{VARIABLE}', {}
     )
 
@@ -154,7 +177,7 @@ def var_set(block, target, _):
     return bm.BlockMap(
         'stack',
         {'VARIABLE': 'variable',
-         'VALUE': target.vars.get_type('var', block['fields']['VARIABLE'][0])},
+         'VALUE': target.vars.get_type('var', _field_id_or_name(block['fields']['VARIABLE']))},
         '{VARIABLE} = {VALUE}', {},
     )
 
@@ -162,7 +185,7 @@ def var_set(block, target, _):
 @mutation('data_changevariableby')
 def var_change(block, target, blockmap):
     """Type switch for a change variable by statement"""
-    var_type = target.vars.get_type('var', block['fields']['VARIABLE'][0])
+    var_type = target.vars.get_type('var', _field_id_or_name(block['fields']['VARIABLE']))
 
     if var_type in ('int', 'float'):
         return bm.BlockMap(

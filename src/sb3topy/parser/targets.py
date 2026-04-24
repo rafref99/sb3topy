@@ -104,6 +104,10 @@ class Target:
         self.hats: List[Tuple[str, Dict[str, Any]]] = []
 
         self.vars = Variables(name, target['isStage'])
+        for varid, (var_name, *_rest) in target.get('variables', {}).items():
+            Variables.all_ids.setdefault(varid, var_name)
+        for listid, (list_name, *_rest) in target.get('lists', {}).items():
+            Variables.all_ids.setdefault(listid, list_name)
 
         self.events = naming.Events()
         self.prototypes = Prototypes(self.events)

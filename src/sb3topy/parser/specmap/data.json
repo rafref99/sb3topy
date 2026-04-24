@@ -558,7 +558,10 @@
         "args": {
             "BROADCAST_INPUT": "str"
         },
-        "code": "util.send_broadcast({BROADCAST_INPUT})"
+        "code": [
+            "util.send_broadcast({BROADCAST_INPUT})",
+            "await self.yield_()"
+        ]
     },
     "event_broadcastandwait": {
         "type": "stack",

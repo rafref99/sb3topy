@@ -5,9 +5,10 @@ Orchestrates the job of parsing the project.json
 """
 
 import logging
+from typing import Dict, List, Any, Optional, Tuple, Union
 
 from .. import config
-from . import sanitizer, specmap, targets
+from . import sanitizer, specmap, targets, linter, ast_generator
 from .specmap import codemap
 from .variables import Variables
 
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 def parse_project(project, manifest, parser_config=None):
     """Parses project and returns the Python code"""
     logger.info("Compiling project into Python...")
+    Variables.reset()
+    targets.Target.broadcasts = {}
+    targets.Target.cloned_targets = set()
     return Parser(project, manifest, parser_config).parse()
 
 
@@ -42,6 +46,11 @@ class Parser:
 
     def parse(self):
         """Parses the sb3 and returns Python code"""
+        # Run pre-conversion analysis
+        results = linter.lint_project(self.project.json)
+        for warning in results['warnings']:
+            logger.warning("Linter: %s", warning['message'])
+
         # Run the first parsing pass
         self.first_pass()
 
@@ -154,27 +163,24 @@ class Parser:
                      blockid, block['opcode'])
         return ""
 
-    def parse_stack(self, blockid, parent_block=None):
+    def parse_stack(self, blockid: str, parent_block: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
         """
-        Parses a stack/input
+        Parses a stack/input into Python code using AST-based generation.
         """
 
-        code = ""
+        ast_gen = ast_generator.ASTGenerator()
         block = self.target.blocks[blockid]
+        last_blockmap = None
 
         while block:
-            # logger.debug("Parsing block '%s' with opcode '%s'",
-            #               blockid, block['opcode'])
-
             # Get the conversion map
-            # May "mutate" the block to add custom arguments
-            # May set target.prototype
             blockmap = specmap.get_blockmap(block, self.target)
+            last_blockmap = blockmap
 
             # Get fields
             args = {}
             for name in block['fields']:
-                args[name] = 'field', block['fields'][name][0]
+                args[name] = 'field', block['fields'][name]
 
             # Get inputs
             for name, value in block['inputs'].items():
@@ -191,44 +197,38 @@ class Parser:
                         f"{type(clean_args[name]).__name__}")
 
             # Create the code for the block
-            code = code + blockmap.format_code(clean_args) + "\n"
+            # For now, we still use the formatted string but parse it into AST
+            # This allows us to gradually transition while improving robustness.
+            formatted_code = blockmap.format_code(clean_args)
+            ast_gen.add_statement(formatted_code)
 
             # Get the next block
             block = self.target.blocks.get(block['next'])
 
         # If the parent block is a loop, yield
         if parent_block and specmap.is_loop(parent_block) and \
-            blockmap.return_type == 'stack' and not \
+            last_blockmap and last_blockmap.return_type == 'stack' and not \
                 (self.target.prototype and self.target.prototype.warp):
-            code = code + "\n" + codemap.yield_()
+            ast_gen.add_statement(codemap.yield_())
 
-        # At the end of a procedure definition,
-        # clear the target's prototype
+        # At the end of a procedure definition, clear the target's prototype
         if parent_block and specmap.is_procedure(parent_block):
             self.target.prototype = None
 
-        return blockmap.return_type, code.strip()
+        # Determine the return type of the stack (from the last block)
+        return_type = last_blockmap.return_type if last_blockmap else 'stack'
+
+        # Get the compiled code from the AST generator
+        code = ast_gen.get_code()
+
+        return return_type, code.strip()
 
     def parse_arg(self, name, args, end_type, block):
         """
         Ensures the type of an input matches
         the type expected by the blockmap.
 
-        start_type is the type of value
-        end_type is the type expected by the blockmap
-
-        If start_type is blockid, variable, or list_reporter,
-        the value will be parsed and a new type generated.
-
-        start_type will then be 'field', 'literal', or the type of a block.
-
-        Fields can contain many values, such as the name of a
-        variable. They are parsed by the parse_field function.
-
-        Literals are forcibly casted to mach the end_type.
-
-        Blocks are casted at runtime. Depending on the
-        type, a wrapper may be placed around the block.
+        Returns an AST node representing the argument.
         """
 
         # Get the unparsed value and type from args
@@ -240,6 +240,8 @@ class Parser:
 
         # A variable reporter
         elif start_type == 'variable':
+            # Identify variable by its name
+            # If the variable exists, get its type and reference
             start_type = self.target.vars.get_type('var', value)
             value = self.target.vars.get_reference('var', value)
 
@@ -250,14 +252,28 @@ class Parser:
 
         # Directly cast a literal
         if start_type == 'literal':
-            return sanitizer.cast_literal(value, end_type)
+            if end_type == 'field':
+                value = self.parse_field(value, end_type, args)
+            else:
+                value = sanitizer.cast_literal(value, end_type)
+        elif start_type == 'field':
+            # Fields take special parsing
+            value = self.parse_field(value, end_type, args)
+        else:
+            # Put a runtime cast wrapper around a block
+            value = sanitizer.cast_wrapper(value, start_type, end_type)
 
-        # Fields take special parsing
-        if start_type == 'field':
-            return self.parse_field(value, end_type, args)
+        # If the start_type is 'stack', we should not attempt to parse it as an expression
+        if start_type == 'stack':
+            # For stacks, we return the value directly.
+            # In the future, we should probably return a list of AST nodes.
+            return value
 
-        # Put a runtime cast wrapper around a block
-        return sanitizer.cast_wrapper(value, start_type, end_type)
+        # Verify the result is valid Python, but keep the original string.
+        # ast.unparse() can remove outer parentheses that are meaningful once
+        # this expression is embedded into a larger Scratch expression.
+        ast_generator.expression_to_ast(value)
+        return value
 
     def parse_field(self, value, end_type, args):
         """
@@ -279,6 +295,14 @@ class Parser:
 
         Otherwise, the value will be quoted and a warning shown.
         """
+        # Resolve the variable/list name if it's an ID
+        if end_type in ('variable', 'list'):
+            # The value could be [name, id] or just name/id
+            if isinstance(value, (list, tuple)):
+                value = value[1] if len(value) > 1 else value[0]
+        elif isinstance(value, (list, tuple)):
+            value = value[0]
+
         # Quote and lower a field
         if end_type == 'field':
             return sanitizer.quote_field(value.lower())
@@ -302,9 +326,15 @@ class Parser:
 
         # Get an existing hat identifier for another target
         if end_type == 'ex_hat_ident':
+            target_name = args['TARGET'][1]
+            if isinstance(target_name, (list, tuple)):
+                target_name = target_name[0]
             return self.targets.targets[
-                args['TARGET'][1]].events.existing_hat(
-                    value, {name: value[1] for name, value in args.items()})
+                target_name].events.existing_hat(
+                    value, {
+                        name: val[1][0] if isinstance(val[1], (list, tuple)) else val[1]
+                        for name, val in args.items()
+                    })
 
         # Get a procedure argument identifier
         if end_type == 'proc_arg':

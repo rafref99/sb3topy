@@ -200,13 +200,15 @@ def parse_sounds(target: targets.Target, assets: Dict[str, str]) -> str:
 def parse_variables(target: targets.Target) -> str:
     """Creates code to init variables for a target and clones"""
     vars_init = []
+    emitted = set()
 
-    for value in target['variables'].values():
-        # Get the variable instance
-        var = target.vars.get_var('var', value[0])
+    for varid, value in target['variables'].items():
+        # Get the variable instance using ID if available
+        var = target.vars.get_var('var', varid)
 
         # Get the clean name
         name = var.clean_name
+        emitted.add(name)
 
         # Cast the value
         type_ = var.get_type()
@@ -216,6 +218,13 @@ def parse_variables(target: targets.Target) -> str:
             value = sanitizer.cast_literal(value[1], type_)
 
         vars_init.append(f"self.{name} = {value}")
+
+    for var in target.vars.local_vars.dict.values():
+        name = var.clean_name
+        if name in emitted or not name.startswith('var_'):
+            continue
+        vars_init.append(f"self.{name} = 0")
+        emitted.add(name)
 
     return '\n'.join(vars_init).rstrip()
 
@@ -227,7 +236,7 @@ def parse_lists(target: targets.Target) -> str:
     # Used for duplicate detection
     lists = {}
 
-    for lst in target['lists'].values():
+    for lstid, lst in target['lists'].items():
         # Hack for duplicate lists
         if lst[0] in lists and lists[lst[0]] and not lst[1]:
             continue
@@ -238,8 +247,8 @@ def parse_lists(target: targets.Target) -> str:
         for value in lst[1]:
             items.append(sanitizer.quote_number(value))
 
-        # Get the list Variable object
-        var = target.vars.get_var('list', lst[0])
+        # Get the list Variable object using ID
+        var = target.vars.get_var('list', lstid)
         list_class = var.get_list_type()
         logger.debug("Treating list '%s' as %s", var.clean_name, list_class)
 
@@ -263,14 +272,14 @@ def parse_monitors(monitors: List[Dict[str, Any]], targets: targets.Targets) -> 
 
     for monitor in monitors:
         # Get the target name
-        target_name = monitor.get('target', 'Stage')
+        target_name = monitor.get('spriteName') or monitor.get('target') or 'Stage'
         if not target_name:
             target_name = 'Stage'
-        
+
         target = targets.get(target_name)
         if not target:
             continue
-            
+
         clean_target = "SPRITES.stage" if target_name == 'Stage' else f"SPRITES[{sanitizer.quote_string(target_name)}]"
         
         if monitor['mode'] == 'list':
@@ -287,7 +296,7 @@ def parse_monitors(monitors: List[Dict[str, Any]], targets: targets.Targets) -> 
                 "    {x}, {y}, {width}, {height}, {visible}\n"
                 "))"
             ).format(
-                name=sanitizer.quote_string(monitor['params']['LIST']),
+                name=sanitizer.quote_string(target.vars.local_ids.get(monitor['params']['LIST'], monitor['params']['LIST'])),
                 target=clean_target,
                 varname=sanitizer.quote_string(var.clean_name),
                 x=monitor['x'],
@@ -305,7 +314,7 @@ def parse_monitors(monitors: List[Dict[str, Any]], targets: targets.Targets) -> 
                 "    {x}, {y}, {visible}, {mode}\n"
                 "))"
             ).format(
-                name=sanitizer.quote_string(monitor['params']['VARIABLE']),
+                name=sanitizer.quote_string(target.vars.local_ids.get(monitor['params']['VARIABLE'], monitor['params']['VARIABLE'])),
                 target=clean_target,
                 varname=sanitizer.quote_string(var.clean_name),
                 x=monitor['x'],

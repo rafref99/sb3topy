@@ -2,15 +2,21 @@
 
 Active improvement backlog. When an item is completed, remove it from this file in the same change.
 
-1. Continue reducing global mutable configuration risk.
+1. "Turbo Mode" Toggle in GUI
+   - Add a checkbox to enable/disable Turbo Mode from the GUI.
+
+2. Optimized Rendering for Static Stages
+   - Implement dirty-rect optimization for static backgrounds to boost FPS.
+
+3. Enhanced Extension Support
+   - Modularize support for Pen, Music, and Video Sensing.
+
+4. Headless Testing with Frame Snapshots
+   - Use dummy SDL drivers and visual regression snapshots for CI.
+
+5. Continue reducing global mutable configuration risk.
    - Introduce a `Config` dataclass or immutable config object passed into conversion.
    - Keep module globals as a compatibility layer during transition.
 
-2. Continue improving generated-code safety and robustness.
-   - Consider AST-based generation for larger generated-code surfaces where practical.
-   - Add fuzz/property tests for names, broadcasts, variables, list values, procedure names, braces, quotes, newlines, keywords, dunder names, and Unicode edge cases.
-
-3. Expand compatibility tests beyond `minimal.sb3`.
-   - Add fixture projects for motion, looks, sound, variables/lists, clones, broadcasts, custom blocks, monitors, pen, and SVG assets.
-   - Snapshot generated `project.py` for stable fixtures.
-   - Add deterministic runtime smoke tests under dummy SDL drivers.
+6. Standalone Executable Export
+    - Integrate `PyInstaller` or `Nuitka` for exporting projects as executables.

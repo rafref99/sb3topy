@@ -10,9 +10,17 @@ __all__ = ['Sounds']
 
 
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 import pygame as pg
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from asyncio import Task
@@ -43,7 +51,9 @@ class Sounds:
     """
 
     _cache: Dict[str, pg.mixer.Sound] = {}
+    _pitch_cache: Dict[Tuple[pg.mixer.Sound, float], pg.mixer.Sound] = {}
     _all_sounds: Dict[pg.mixer.Channel, 'Task'] = {}
+    _pitch_effect_scale = 0.65
 
     def __init__(self, volume: float, sounds: List[Dict[str, Any]], copy_dict: Optional[Dict[str, pg.mixer.Sound]] = None):
         if copy_dict is None:
@@ -108,6 +118,12 @@ class Sounds:
 
         # Play the sound
         if sound:
+            # Apply pitch effect if necessary
+            pitch = self.effects.get('pitch', 0.0)
+            if pitch != 0.0:
+                sound = self._apply_pitch(
+                    sound, pitch * self._pitch_effect_scale)
+
             # Stop the sound if it is already playing
             for channel, task in list(self._channels.items()):
                 if channel.get_sound() == sound:
@@ -122,6 +138,58 @@ class Sounds:
         
         # Return a dummy task
         return asyncio.create_task(asyncio.sleep(0))
+
+    def _apply_pitch(self, sound: pg.mixer.Sound, pitch: float) -> pg.mixer.Sound:
+        """Applies a pitch effect to a sound by resampling"""
+        # Check cache
+        cached_sound = self._pitch_cache.get((sound, pitch))
+        if cached_sound:
+            return cached_sound
+
+        if np is None:
+            logger.warning("Sound pitch effect requires numpy; playing original sound.")
+            return sound
+
+        # Scratch pitch is in tenths of a semitone, so 120 units is one octave.
+        multiplier = 2 ** (pitch / 120)
+
+        # Get sound as array
+        try:
+            array = pg.sndarray.array(sound)
+            if len(array) == 0:
+                return sound
+
+            new_len = max(1, int(round(len(array) / multiplier)))
+            source_positions = np.arange(new_len, dtype=np.float64) * multiplier
+            source_positions = np.clip(source_positions, 0, len(array) - 1)
+            indices_low = np.floor(source_positions).astype(np.int64)
+            indices_high = np.minimum(indices_low + 1, len(array) - 1)
+            weights = source_positions - indices_low
+
+            if array.ndim == 1:
+                new_array = (
+                    array[indices_low] * (1.0 - weights) +
+                    array[indices_high] * weights
+                )
+            else:
+                new_array = (
+                    array[indices_low] * (1.0 - weights)[:, None] +
+                    array[indices_high] * weights[:, None]
+                )
+            if np.issubdtype(array.dtype, np.integer):
+                type_info = np.iinfo(array.dtype)
+                new_array = np.rint(new_array).clip(
+                    type_info.min,
+                    type_info.max
+                )
+            new_array = new_array.astype(array.dtype)
+
+            new_sound = pg.sndarray.make_sound(new_array)
+            self._pitch_cache[(sound, pitch)] = new_sound
+            return new_sound
+        except Exception:
+            logger.exception("Failed to apply pitch effect")
+            return sound
 
     async def _handle_channel(self, sound: pg.mixer.Sound, channel: pg.mixer.Channel):
         """Saves the channel and waits for it to finish"""
@@ -166,6 +234,8 @@ class Sounds:
         if effect == 'pan':
             self.effects['pan'] = max(-100.0, min(100.0, value))
             self._update_volume()
+        elif effect == 'pitch':
+            self.effects['pitch'] = value
 
     def change_effect(self, effect: str, value: float):
         """Change a sound effect"""

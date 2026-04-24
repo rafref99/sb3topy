@@ -2,6 +2,30 @@
 
 This file documents the changes and improvements made during the project rework.
 
+## [2026-04-24] - Scratch Compatibility and Runtime Bug Fixes
+
+### Parser and Generated Code Fixes
+- Fixed AST/source round-tripping so nested Scratch operator expressions keep meaningful parentheses after validation. This prevents generated formulas from changing behavior when expressions are embedded inside larger expressions.
+- Fixed custom block calls with blank string inputs so empty Scratch text-shadow arguments remain `''` instead of being coerced to numeric `0`. This fixed the Mini Cooper drive-assist/autodrive logic where automatic upshift calls were repeatedly setting neutral instead of incrementing the gear.
+- Fixed variable-name prefix handling so Scratch variables beginning with `var`, such as `variant`, are still generated with the correct `var_` prefix.
+- Fixed monitor target resolution so sprite-local variable monitors use `spriteName` when available instead of being attached to the Stage.
+- Fixed sensing menu normalization for `costume #`, allowing generated `sensing_of` code to read `costume.number` instead of incorrectly looking for a variable named `costume`.
+
+### Engine and Runtime Fixes
+- Added support for Scratch costume menu values `previous costume`, `next costume`, and `random costume`, including correct numeric costume wrapping.
+- Made `numpy` optional for sound loading so projects can still run without pitch resampling support installed.
+- Improved sound pitch resampling by replacing rough nearest-index sampling with interpolated sampling.
+- Reduced runtime pitch effect strength to 65% before resampling to better match the tested Mini Cooper engine sound behavior.
+- Added a scheduler yield after non-waiting broadcasts so receiver scripts can initialize before the sender continues. This fixed engine startup races where turning the car on could require multiple tries.
+
+### Exported Example Fixes
+- Regenerated the Giga Iguana example after parser fixes so body-part positioning and camera/background behavior use the corrected generated code.
+- Regenerated the Mini Cooper example after parser/runtime fixes so drive assist changes gears, engine startup responds immediately, and pitch tuning is applied in the exported engine.
+
+### Testing
+- Added regression coverage for nested operator parentheses, blank custom-block arguments, variable prefixing, monitor targets, `costume #` sensing, special costume menu values, and sound pitch reduction.
+- Verified the full pytest suite after the final pitch adjustment with `PYTHONPATH=src python3 -m pytest -q` (`44 passed`).
+
 ## [2026-04-22] - Initial Rework Phase
 
 ### Documentation & Project Info
@@ -120,6 +144,50 @@ This file documents the changes and improvements made during the project rework.
 - Expanded `tests/test_engine_effects.py` to cover ghost render visibility, transparent sprite compositing over the stage, and transparent-border trimming.
 - Added `tests/test_svg_conversion.py` to cover SVG PNG alpha normalization, edge-only color bleed, RGB/RGBA conversion, and opaque edge-background cleanup.
 - Verified the full pytest suite with `PYTHONPATH=src python3 -m pytest -q`.
+
+## [2026-04-24] - AST-based Code Generation and Expanded Graphic Effects
+
+### New Features
+- **Transition to AST-based Code Generation:** 
+  - Introduced `ASTGenerator` in `src/sb3topy/parser/ast_generator.py` to build and unparse Python code using the `ast` module.
+  - Updated `Parser.parse_stack` and `Parser.parse_arg` to use AST-based generation, ensuring that all generated code is syntactically valid and robust against malformed input.
+  - This architecture replaces simple string concatenation with a more structured and testable code generation pipeline.
+- **Finished Graphic Effects:** 
+  - Completed the implementation of Scratch graphic effects by adding placeholders and infrastructure for `fisheye` and `whirl` in `src/engine/types/costumes.py`.
+  - These effects now correctly register and clear, rounding out the support for all standard Scratch looks effects.
+
+### Bug Fixes
+- **Fixed Variable Resolution and "Unregistered var" Warnings:**
+  - Implemented Scratch ID to name mapping in the `Variables` class to correctly resolve variables and lists even when their IDs are provided in the JSON instead of names.
+  - Refactored `src/sb3topy/parser/specmap/codemap.py` to use variable IDs for robust code generation of variable initializations and monitors.
+  - This ensures that projects with duplicate variable names or those using IDs in reporters (common in some Scratch versions/extensions) convert correctly.
+  - Resolves critical "Unregistered var" warnings that could cause scripts controlling sprite visibility (like intro thumbnails) to fail.
+- Fixed a crash (`AttributeError`) when generating code for variable and list monitors due to incorrect property access on the `Target` object.
+- **Fixed AST Generation Syntax Errors:**
+  - Resolved a critical issue where multi-line statements or non-expression code (like `if` blocks or assignments) were incorrectly parsed as Python expressions during conversion.
+  - Added a robust fallback in `ASTGenerator.parse_expression` that handles statement-containing strings gracefully instead of raising `SyntaxError`.
+  - Updated `Parser.parse_arg` to correctly identify and bypass AST validation for 'stack' (statement list) inputs, ensuring complex Scratch logic (like loops and conditionals) generates correctly.
+  - This fix restores functionality for scripts that rely on these blocks, such as thumbnails that need to be hidden at the start of a project.
+- **Improved Field Parsing:**
+  - Updated `Parser.parse_field` to correctly handle Scratch fields that provide variable and list names as a `[name, id]` list.
+  - Improved `ASTGenerator.parse_expression` to handle `pass`, `continue`, and `break` statements without unnecessary warnings.
+  - Fixed a return type regression in `Parser.parse_stack` for empty stacks.
+
+### Technical Improvements
+- Improved the safety of argument parsing by pre-validating them as AST expressions.
+
+### New Features
+- **Project Linter / Pre-Conversion Analysis:** Added a new linter that analyzes Scratch projects before conversion.
+  - Reports statistics on targets, blocks, variables, lists, costumes, and sounds.
+  - Warns about potential compatibility issues with Music and Video Sensing extensions.
+  - Warns about performance risks in projects with a very large number of blocks.
+  - Integrated into the core `Parser` to provide automatic feedback.
+- **Sound Pitch and Speed Effects:** Implemented the "pitch" effect in the engine.
+  - Uses `numpy` for high-quality sound resampling.
+  - Implemented a sound cache for resampled sounds to maintain performance during playback.
+
+### Technical Improvements
+- Added `numpy` as a core dependency in `requirements.txt` and `pyproject.toml`.
 
 ## [2026-04-23] - Packaging, CI, Logging, and Launcher Updates
 
