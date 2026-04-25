@@ -125,7 +125,12 @@ class Render:
     def draw(self, display):
         """Handles drawing everything"""
         display.screen.fill((255, 255, 255))
-        display.screen.blit(self.stage.image, display.rect.topleft)
+
+        stage_base = self.stage.image.get_at((0, 0))
+        if stage_base.a < 255:
+            display.screen.fill(stage_base[:3], display.rect)
+
+        display.screen.blit(self.stage.image, self.stage.rect)
         self.stage.dirty = 0
 
         if Pen.image is not None:

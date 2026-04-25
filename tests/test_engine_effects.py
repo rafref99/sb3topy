@@ -82,6 +82,49 @@ class CostumeEffectsTests(unittest.TestCase):
             ({"costume1": asset}, {}),
         )
 
+    def test_render_uses_stage_sprite_rect(self):
+        stage_sprite = pg.sprite.DirtySprite()
+        stage_sprite.image = pg.Surface((6, 6), pg.SRCALPHA)
+        stage_sprite.image.fill((200, 10, 20, 255))
+        stage_sprite.rect = pg.Rect(10, 12, 6, 6)
+        stage_sprite.dirty = 1
+
+        sprites = SimpleNamespace(
+            group=pg.sprite.LayeredDirty(),
+            stage=SimpleNamespace(sprite=stage_sprite),
+            monitors=[],
+        )
+        display = SimpleNamespace(
+            screen=pg.Surface((24, 24), pg.SRCALPHA),
+            rect=pg.Rect(0, 0, 24, 24),
+        )
+
+        Render(sprites).draw(display)
+
+        self.assertEqual(display.screen.get_at((0, 0)), pg.Color(255, 255, 255, 255))
+        self.assertEqual(display.screen.get_at((10, 12)), pg.Color(200, 10, 20, 255))
+
+    def test_render_uses_transparent_stage_rgb_as_base_color(self):
+        stage_sprite = pg.sprite.DirtySprite()
+        stage_sprite.image = pg.Surface((6, 6), pg.SRCALPHA)
+        stage_sprite.image.fill((52, 52, 52, 0))
+        stage_sprite.rect = pg.Rect(0, 0, 6, 6)
+        stage_sprite.dirty = 1
+
+        sprites = SimpleNamespace(
+            group=pg.sprite.LayeredDirty(),
+            stage=SimpleNamespace(sprite=stage_sprite),
+            monitors=[],
+        )
+        display = SimpleNamespace(
+            screen=pg.Surface((12, 12), pg.SRCALPHA),
+            rect=pg.Rect(0, 0, 12, 12),
+        )
+
+        Render(sprites).draw(display)
+
+        self.assertEqual(display.screen.get_at((0, 0)), pg.Color(52, 52, 52, 255))
+
     def test_ghost_effect_uses_scratch_uppercase_name(self):
         costumes = self.make_costumes()
 
@@ -216,6 +259,34 @@ class CostumeEffectsTests(unittest.TestCase):
 
         self.assertTrue(target.shown)
         self.assertTrue(target.sprite.visible)
+
+    def test_touching_ignores_hidden_targets_but_keeps_ghosted_targets(self):
+        target = Target.__new__(Target)
+        target.sprite = pg.sprite.DirtySprite()
+        target.sprite.rect = pg.Rect(0, 0, 10, 10)
+        target.sprite.mask = pg.mask.Mask((10, 10), True)
+        target.sprite.visible = False
+        target._shown = True
+        target.update = lambda _display, _create_mask=False: None
+
+        other = Target.__new__(Target)
+        other.sprite = pg.sprite.DirtySprite()
+        other.sprite.rect = pg.Rect(0, 0, 10, 10)
+        other.sprite.mask = pg.mask.Mask((10, 10), True)
+        other.sprite.visible = False
+        other._shown = False
+        other.clones = []
+        other.update = lambda _display, _create_mask=False: None
+
+        util = SimpleNamespace(
+            display=SimpleNamespace(),
+            sprites=SimpleNamespace(targets={"Other": other}),
+        )
+
+        self.assertFalse(target.get_touching(util, "Other"))
+
+        other._shown = True
+        self.assertTrue(target.get_touching(util, "Other"))
 
     def test_transparent_border_trim_preserves_center_offset(self):
         image = pg.Surface((10, 10), pg.SRCALPHA)

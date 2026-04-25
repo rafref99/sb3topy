@@ -480,6 +480,9 @@ class Target:
         """Check if this sprite is touching another or its clones"""
         if other == "_mouse_":
             self.update(util.display, True)
+            if not self.shown:
+                return False
+
             xpos, ypos = pg.mouse.get_pos()
 
             offset = self.sprite.rect.topleft
@@ -496,9 +499,12 @@ class Target:
         # Must update this sprite and the other before testing
         self.update(util.display, True)
         other_target.update(util.display, True)
+        if not self.shown:
+            return False
 
         # Check if touching the original
-        if pg.sprite.collide_mask(other_target.sprite, self.sprite):
+        if (other_target.shown and
+                pg.sprite.collide_mask(other_target.sprite, self.sprite)):
             return True
 
         # Check if touching a clone
@@ -507,7 +513,7 @@ class Target:
             clone.update(util.display, True)
 
             # Check if touching a clone
-            if pg.sprite.collide_mask(self.sprite, clone.sprite):
+            if clone.shown and pg.sprite.collide_mask(self.sprite, clone.sprite):
                 return True
         return False
 

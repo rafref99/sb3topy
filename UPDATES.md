@@ -2,6 +2,25 @@
 
 This file documents the changes and improvements made during the project rework.
 
+## [2026-04-25] - Generated Project Runtime Compatibility Fixes
+
+### Parser and Generated Code Fixes
+- Fixed plain Scratch `broadcast` code generation so non-waiting broadcasts no longer insert an immediate scheduler yield before the next block. This restored correct same-tick ordering for projects that broadcast `update gui` and then change screen state, fixing the Galactic Arena free-build editor where the backdrop appeared but the builder GUI controls were missing.
+- Fixed the `username` reporter code generation to reference `engine.config.USERNAME`, avoiding a generated `config.USERNAME` namespace error.
+
+### Engine and Runtime Fixes
+- Fixed Stage/backdrop rendering to use the Stage sprite's computed rect instead of always blitting the backdrop at the top-left of the display. This corrected off-center and oversized Scratch backdrops, including the Galactic Arena campaign/level selector layout.
+- Added stage base-color handling for transparent backdrop pixels by using the transparent pixel RGB from the rendered backdrop before compositing. This prevents transparent SVG backdrop areas from appearing as white in generated projects.
+- Updated collision sensing so hidden sprites and clones do not participate in `touching` checks, while fully ghosted but shown sprites still do. This better matches Scratch behavior where ghosted sprites can collide but hidden sprites cannot.
+
+### Exported Example Fixes
+- Patched the exported Galactic Arena project in `~/sb3topy_examples/GalacticArena_639271493/` with the broadcast timing and renderer fixes so it can be tested without regenerating the export.
+- Verified the free-build editor now initializes its builder GUI clones after entering free-build mode.
+
+### Testing
+- Added regression coverage for plain broadcast code generation, Stage rect-based rendering, transparent backdrop base color handling, hidden-vs-ghosted collision sensing, and the `username` reporter namespace.
+- Verified the full pytest suite after the final Galactic Arena fixes (`51 passed`).
+
 ## [2026-04-24] - Scratch Compatibility and Runtime Bug Fixes
 
 ### Parser and Generated Code Fixes

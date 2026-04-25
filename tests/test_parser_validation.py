@@ -5,7 +5,7 @@ from sb3topy import config, project as project_helpers
 from sb3topy.parser import parser as project_parser
 from sb3topy.parser import naming
 from sb3topy.parser import typing as parser_typing
-from sb3topy.parser.specmap import blockmap, mutations
+from sb3topy.parser.specmap import blockmap, data, mutations
 from sb3topy.unpacker import extract
 
 
@@ -84,6 +84,68 @@ class ParserValidationTests(unittest.TestCase):
             )
         finally:
             naming.Events.events = old_events
+
+    def test_username_reporter_uses_engine_config_namespace(self):
+        project_data = {
+            "targets": [{
+                "isStage": True,
+                "name": "Stage",
+                "variables": {"user-id": ["user", ""]},
+                "lists": {},
+                "broadcasts": {},
+                "blocks": {
+                    "hat": {
+                        "opcode": "event_whenflagclicked",
+                        "next": "set",
+                        "parent": None,
+                        "inputs": {},
+                        "fields": {},
+                        "shadow": False,
+                        "topLevel": True,
+                    },
+                    "set": {
+                        "opcode": "data_setvariableto",
+                        "next": None,
+                        "parent": "hat",
+                        "inputs": {"VALUE": [2, "username"]},
+                        "fields": {"VARIABLE": ["user", "user-id"]},
+                        "shadow": False,
+                        "topLevel": False,
+                    },
+                    "username": {
+                        "opcode": "sensing_username",
+                        "next": None,
+                        "parent": "set",
+                        "inputs": {},
+                        "fields": {},
+                        "shadow": False,
+                        "topLevel": False,
+                    },
+                },
+                "comments": {},
+                "currentCostume": 0,
+                "costumes": [],
+                "sounds": [],
+                "volume": 100,
+                "layerOrder": 0,
+            }],
+        }
+
+        code = project_parser.parse_project(
+            project_helpers.Project(project_data),
+            project_helpers.Manifest(),
+            config.snapshot_config(),
+        )
+
+        self.assertIn("self.var_user = engine.config.USERNAME", code)
+        self.assertNotIn("config.USERNAME", code.replace("engine.config.USERNAME", ""))
+
+    def test_plain_broadcast_does_not_yield_before_next_block(self):
+        code = data.BLOCKS["event_broadcast"].format_code({
+            "BROADCAST_INPUT": "'update gui'",
+        })
+
+        self.assertEqual(code, "util.send_broadcast('update gui')")
 
     def test_typing_node_rejects_invalid_type_marker(self):
         node = parser_typing.Node(("target", "var", "name"), set())

@@ -558,10 +558,7 @@
         "args": {
             "BROADCAST_INPUT": "str"
         },
-        "code": [
-            "util.send_broadcast({BROADCAST_INPUT})",
-            "await self.yield_()"
-        ]
+        "code": "util.send_broadcast({BROADCAST_INPUT})"
     },
     "event_broadcastandwait": {
         "type": "stack",
@@ -981,7 +978,7 @@
     "sensing_username": {
         "type": "str",
         "args": {},
-        "code": "config.USERNAME"
+        "code": "engine.config.USERNAME"
     },
     "operator_add": {
         "type": "float",
