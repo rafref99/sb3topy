@@ -1,10 +1,12 @@
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 from sb3topy import config, project as project_helpers
 from sb3topy.parser import parser as project_parser
-from sb3topy.parser import naming
+from sb3topy.parser import naming, sanitizer
 from sb3topy.parser import typing as parser_typing
+from sb3topy.parser.prototypes import Prototype
 from sb3topy.parser.specmap import blockmap, data, mutations
 from sb3topy.unpacker import extract
 
@@ -146,6 +148,102 @@ class ParserValidationTests(unittest.TestCase):
         })
 
         self.assertEqual(code, "util.send_broadcast('update gui')")
+
+    def test_color_sensing_blocks_generate_runtime_calls(self):
+        touching_color = data.BLOCKS["sensing_touchingcolor"].format_code({
+            "COLOR": "'#ff0000'",
+        })
+        color_touching_color = data.BLOCKS["sensing_coloristouchingcolor"].format_code({
+            "COLOR": "'#ff0000'",
+            "COLOR2": "'#00ff00'",
+        })
+
+        self.assertEqual(touching_color, "self.get_touching_color(util, '#ff0000')")
+        self.assertEqual(
+            color_touching_color,
+            "self.get_color_touching_color(util, '#ff0000', '#00ff00')",
+        )
+
+    def test_current_date_blocks_use_struct_time_attributes(self):
+        self.assertEqual(
+            data.BLOCKS["sensing_current_month"].format_code({}),
+            "time.localtime().tm_mon",
+        )
+        self.assertEqual(
+            data.BLOCKS["sensing_current_day_of_week"].format_code({}),
+            "((time.localtime().tm_wday + 1) % 7 + 1)",
+        )
+
+    def test_numeric_reporter_casts_to_bool(self):
+        self.assertEqual(
+            sanitizer.cast_wrapper("score", "int", "bool"),
+            "bool(score)",
+        )
+
+    def test_custom_block_argument_lookup_normalizes_whitespace(self):
+        class Node:
+            known_type = "int"
+
+        class Graph:
+            def add_node(self, name):
+                return Node()
+
+        class Target(dict):
+            digraph = Graph()
+
+        prototype = Prototype(
+            Target(name="Sprite"),
+            {
+                "proccode": "point %n",
+                "argumentids": "[\"arg-id\"]",
+                "argumentnames": "[\"x\\n\"]",
+                "warp": "false",
+            },
+            "my_point",
+        )
+
+        self.assertEqual(prototype.get_arg("x"), "arg_x")
+        self.assertEqual(prototype.get_type("x"), "int")
+
+    def test_custom_block_argument_lookup_aliases_legacy_base_names(self):
+        class Node:
+            known_type = "int"
+
+        class Graph:
+            def add_node(self, name):
+                return Node()
+
+        class Target(dict):
+            digraph = Graph()
+
+        prototype = Prototype(
+            Target(name="Sprite"),
+            {
+                "proccode": "point towards (adv) %s %s %s %s",
+                "argumentids": "[\"x1-id\",\"y1-id\",\"x2-id\",\"y2-id\"]",
+                "argumentnames": "[\"x1\",\"y1\",\"x2\",\"y2\"]",
+                "warp": "false",
+            },
+            "my_pointtowardsadv",
+        )
+
+        self.assertEqual(prototype.get_arg("x"), "arg_x1")
+        self.assertEqual(prototype.get_arg("y"), "arg_y1")
+        self.assertEqual(prototype.get_type("x"), "int")
+
+    def test_turbowarp_boolean_reporter_compiles_as_constant(self):
+        blockmap = mutations.proc_arg_bool(
+            {
+                "fields": {
+                    "VALUE": ["is TurboWarp?", None],
+                },
+            },
+            SimpleNamespace(prototype=None),
+            None,
+        )
+
+        self.assertEqual(blockmap.return_type, "bool")
+        self.assertEqual(blockmap.code, "True")
 
     def test_typing_node_rejects_invalid_type_marker(self):
         node = parser_typing.Node(("target", "var", "name"), set())
@@ -311,6 +409,63 @@ class ParserValidationTests(unittest.TestCase):
         )
 
         self.assertIn("'variant', SPRITES['Sprite'], 'var_variant'", code)
+
+    def test_builtin_reporter_monitors_are_generated(self):
+        project_data = {
+            "targets": [{
+                "isStage": True,
+                "name": "Stage",
+                "variables": {},
+                "lists": {},
+                "broadcasts": {},
+                "blocks": {},
+                "comments": {},
+                "currentCostume": 0,
+                "costumes": [],
+                "sounds": [],
+                "volume": 100,
+                "layerOrder": 0,
+            }, {
+                "isStage": False,
+                "name": "Sprite",
+                "variables": {},
+                "lists": {},
+                "broadcasts": {},
+                "blocks": {},
+                "comments": {},
+                "currentCostume": 0,
+                "costumes": [],
+                "sounds": [],
+                "volume": 100,
+                "layerOrder": 1,
+            }],
+            "monitors": [{
+                "mode": "default",
+                "opcode": "motion_xposition",
+                "params": {},
+                "spriteName": "Sprite",
+                "x": 5,
+                "y": 75,
+                "visible": True,
+            }, {
+                "mode": "large",
+                "opcode": "sensing_timer",
+                "params": {},
+                "x": 10,
+                "y": 90,
+                "visible": True,
+            }],
+        }
+
+        code = project_parser.parse_project(
+            project_helpers.Project(project_data),
+            project_helpers.Manifest(),
+            config.snapshot_config(),
+        )
+
+        self.assertIn("ReporterMonitor(", code)
+        self.assertIn("'x position', SPRITES['Sprite'], 'xpos'", code)
+        self.assertIn("'timer', SPRITES.stage, 'timer'", code)
 
     def test_sensing_costume_number_switches_to_costume_property(self):
         project_data = {

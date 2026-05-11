@@ -77,6 +77,8 @@ class Inputs:
         # Mouse down only for button 1
         if event.button == 1:
             self.mouse_down = True
+            if sprites.monitors_mouse_down(util.display, event.pos):
+                return
 
         # Check for a clicked sprite
         point = event.pos
@@ -94,18 +96,24 @@ class Inputs:
                 pass
         events.send_to(util, sprites.stage, "sprite_clicked")
 
-    def e_mouseup(self, event):
+    def e_mouseup(self, sprites, event):
         """Handles a mouse up"""
         if event.button == 1:
             self.mouse_down = False
+            sprites.monitors_mouse_up()
 
-    def e_mousemotion(self, display, event):
+    def e_mousemotion(self, display, sprites, event):
         """Updates mouse position"""
         xpos, ypos = event.pos
         self.mouse_x = round((xpos - display.rect.x) /
                              display.scale - 240)
         self.mouse_y = round(
             180 - (ypos - display.rect.y)/display.scale)
+        sprites.monitors_mouse_motion(display, event.pos)
+
+    def e_mousewheel(self, display, sprites, event):
+        """Handles mouse wheel monitor scrolling."""
+        sprites.monitors_scroll(event.y, pg.mouse.get_pos())
 
     def __getitem__(self, key):
         return key.lower() in self.pressed_keys

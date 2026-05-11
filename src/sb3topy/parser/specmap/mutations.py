@@ -152,9 +152,15 @@ def proc_arg_bool(block, target, blockmap):
     """Switch for bool procedure argument reporters"""
     # Optionally replace turbowarp is compiled tags
     arg_name = block['fields']['VALUE'][0]
+    prototype_has_arg = (
+        target.prototype is not None and
+        target.prototype.has_arg(arg_name)
+    )
     if config.IS_COMPILED and arg_name == "is compiled?" and (
-            target.prototype is None or
-            arg_name not in target.prototype.args):
+            target.prototype is None or not prototype_has_arg):
+        return bm.BlockMap('bool', {}, 'True', {})
+    if arg_name == "is TurboWarp?" and (
+            target.prototype is None or not prototype_has_arg):
         return bm.BlockMap('bool', {}, 'True', {})
 
     return proc_arg(block, target, blockmap)

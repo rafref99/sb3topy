@@ -6,6 +6,7 @@ Used to extract a project into the temp folder.
 
 import json
 import logging
+import shutil
 import zipfile
 from hashlib import md5
 from os import path
@@ -30,6 +31,13 @@ def extract_project(manifest: project.Manifest, project_path, extract_config=Non
 
     logger.info("Extracting project...")
     logger.debug("Extracting project from '%s'", project_path)
+
+    if path.isdir(project_path):
+        project_json = path.join(project_path, "project.json")
+        if not path.isfile(project_json):
+            logger.error("Could not find 'project.json' in '%s'", project_path)
+            return None
+        return ExtractDirectory(manifest, project_path, extract_config).project
 
     project_zip = None
     try:
@@ -122,4 +130,54 @@ class Extract:
         with open(save_path, 'wb') as asset_file:
             asset_file.write(asset)
 
+        return md5ext
+
+
+class ExtractDirectory:
+    """
+    Helper class to create a Project from an extracted Scratch project folder.
+    """
+
+    def __init__(self, manifest: project.Manifest, project_dir: str, extract_config=None):
+        self.config = extract_config or config.snapshot_config()
+        self.output_dir = manifest.output_dir
+        self.project_dir = project_dir
+
+        project_json = self.extract_json()
+        self.project = project.Project(project_json)
+
+        for md5ext in self.project.get_costumes():
+            manifest.costumes[md5ext] = self.extract_asset(md5ext)
+        for md5ext in self.project.get_sounds():
+            manifest.sounds[md5ext] = self.extract_asset(md5ext)
+
+    def extract_json(self):
+        """Read and return project.json from an extracted project folder."""
+        with open(path.join(self.project_dir, "project.json"), encoding="utf-8") as project_json:
+            return json.load(project_json)
+
+    def extract_asset(self, md5ext):
+        """Copy an asset from the extracted project folder."""
+        source_path = path.join(self.project_dir, md5ext)
+        save_path = path.join(self.output_dir, "assets", md5ext)
+
+        if not path.isfile(source_path):
+            logger.error("Could not find asset '%s' in '%s'", md5ext, self.project_dir)
+            return None
+
+        if path.isfile(save_path) and not self.config.FRESHEN_ASSETS:
+            logger.debug(
+                "Skipping extraction of asset '%s' (already exists)", md5ext)
+            return md5ext
+
+        if self.config.VERIFY_ASSETS:
+            with open(source_path, "rb") as asset_file:
+                asset = asset_file.read()
+            md5_hash = md5(asset).hexdigest()
+            if md5_hash + '.' + md5ext.partition('.')[2] != md5ext:
+                logger.error(
+                    "Extracted asset '%s' has the wrong md5: '%s'", md5ext, md5_hash)
+                return None
+
+        shutil.copyfile(source_path, save_path)
         return md5ext

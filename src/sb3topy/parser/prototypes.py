@@ -15,6 +15,11 @@ from . import naming, sanitizer, specmap
 logger = logging.getLogger(__name__)
 
 
+def _normalize_arg_name(name):
+    """Normalize Scratch argument names that differ only by whitespace."""
+    return " ".join(str(name).split())
+
+
 class Prototype:
     """
     Represents a custom block
@@ -45,6 +50,7 @@ class Prototype:
         # Get clean argument names
         clean_names = naming.Identifiers()
         clean_names_id = {}
+        clean_names_aliases = {}
         for id_, arg_name in zip(arg_ids, arg_names):
             # Prefix the argument name
             if not arg_name.startswith('arg'):
@@ -60,6 +66,10 @@ class Prototype:
 
             # Save the name by original name
             clean_names.dict[arg_name] = new_name
+            normalized_name = _normalize_arg_name(arg_name)
+            clean_names_aliases[normalized_name] = new_name
+            if normalized_name.endswith("1"):
+                clean_names_aliases.setdefault(normalized_name[:-1], new_name)
 
             # Save the name by arg id
             clean_names_id[id_] = new_name
@@ -67,6 +77,7 @@ class Prototype:
         self.name = clean_name
         self.warp = warp or config.WARP_ALL
         self.args = clean_names.dict
+        self.args_aliases = clean_names_aliases
         self.args_id = clean_names_id
 
         self.arg_nodes = {name: target.digraph.add_node(
@@ -74,10 +85,12 @@ class Prototype:
         ) for name in clean_names_id.values()}
         self.arg_nodes_unclean = {
             unclean: self.arg_nodes[clean] for unclean, clean in self.args.items()}
+        self.arg_nodes_aliases = {
+            alias: self.arg_nodes[clean] for alias, clean in self.args_aliases.items()}
 
     def get_arg(self, name):
         """Gets an argument identifier based on the name"""
-        ident = self.args.get(name)
+        ident = self._arg_name_to_ident(name)
         if ident is None:
             logger.warning(
                 "Unknown argument name '%s' for prototype '%s'", name, self.name)
@@ -112,13 +125,28 @@ class Prototype:
 
     def get_type(self, arg_name):
         """Gets the guessed type of an argument"""
-        argid = self.args.get(arg_name)
+        argid = self._arg_name_to_ident(arg_name)
         if argid is not None:
             return self.arg_nodes[argid].known_type
 
-        logger.warning("Prototype '%s' missing argument '%s",
+        logger.warning("Prototype '%s' missing argument '%s'",
                        self.name, arg_name)
         return None
+
+    def _arg_name_to_ident(self, arg_name):
+        ident = self.args.get(arg_name)
+        if ident is not None:
+            return ident
+        return self.args_aliases.get(_normalize_arg_name(arg_name))
+
+    def has_arg(self, arg_name):
+        return self._arg_name_to_ident(arg_name) is not None
+
+    def get_arg_node(self, arg_name):
+        node = self.arg_nodes_unclean.get(arg_name)
+        if node is not None:
+            return node
+        return self.arg_nodes_aliases[_normalize_arg_name(arg_name)]
 
 
 class Prototypes:
@@ -182,8 +210,15 @@ class Prototypes:
         name = block['fields']['VALUE'][0]
 
         # Get all prototypes which have the arg by blockid
-        protos = {blockid: prototype for blockid,
-                  prototype in self.prototypes_id.items() if name in prototype.arg_nodes_unclean}
+        normalized_name = _normalize_arg_name(name)
+        protos = {
+            blockid: prototype
+            for blockid, prototype in self.prototypes_id.items()
+            if (
+                name in prototype.arg_nodes_unclean or
+                normalized_name in prototype.arg_nodes_aliases
+            )
+        }
 
         # Verify at least one prototype was found
         if not protos:
@@ -191,7 +226,8 @@ class Prototypes:
 
         # If only one was found, assume the arg belongs to it
         if len(protos) == 1:
-            return protos.popitem()[1].arg_nodes_unclean[name]
+            prototype = protos.popitem()[1]
+            return prototype.get_arg_node(name)
 
         # Get the hat block parent above the block
         hat_block = target.get_parent_hat(block)
@@ -205,7 +241,7 @@ class Prototypes:
             # Get the prototype blockid
             blockid = hat_block['inputs']['custom_block'][1]
             if blockid in protos:
-                return protos[blockid].arg_nodes_unclean[name]
+                return protos[blockid].get_arg_node(name)
 
             # The prototype doesn't contain the arg
             logger.warning(

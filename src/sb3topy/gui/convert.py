@@ -28,21 +28,47 @@ class ConvertFrame(ctk.CTkFrame):
 
         header = style.page_header(
             self, "Convert Project",
-            "Choose a Scratch project file and generate a runnable Python project.")
+            "Choose a Scratch project source and generate a runnable Python project.")
 
         content = ctk.CTkFrame(self, fg_color="transparent")
 
         self.project_path = ctk.StringVar(self.app, name="PROJECT_PATH")
+        self.project_url = ctk.StringVar(self.app, name="PROJECT_URL")
+        self.source_mode = ctk.StringVar(
+            self, value="URL" if self.project_url.get() else "Directory")
         source_frame = style.section(content, "Source")
+        mode_control = ctk.CTkSegmentedButton(
+            source_frame,
+            values=["Directory", "URL"],
+            variable=self.source_mode,
+            command=self.update_source_mode,
+            fg_color=style.SURFACE_ALT,
+            selected_color=style.ACCENT,
+            selected_hover_color=style.ACCENT_ACTIVE_HOVER,
+            unselected_color=style.BORDER,
+            unselected_hover_color=style.SURFACE_ALT,
+            text_color=style.TEXT,
+            corner_radius=8,
+        )
         project_label = ctk.CTkLabel(
-            source_frame, text="Input project", text_color=style.MUTED,
+            source_frame, text="Project directory or file", text_color=style.MUTED,
             anchor="w")
         project_box = style.entry(
             source_frame, textvariable=self.project_path,
-            placeholder_text="Select a .sb3 or .zip project")
-        project_button = style.secondary_button(
-            source_frame, text="Browse...", command=self.browse_project,
-            width=110)
+            placeholder_text="Select an extracted project folder, .sb3, or .zip")
+        project_buttons = ctk.CTkFrame(source_frame, fg_color="transparent")
+        project_file_button = style.secondary_button(
+            project_buttons, text="File...", command=self.browse_project,
+            width=88)
+        project_folder_button = style.secondary_button(
+            project_buttons, text="Folder...", command=self.browse_project_folder,
+            width=94)
+        url_label = ctk.CTkLabel(
+            source_frame, text="Scratch project URL", text_color=style.MUTED,
+            anchor="w")
+        url_box = style.entry(
+            source_frame, textvariable=self.project_url,
+            placeholder_text="https://scratch.mit.edu/projects/123456789/")
         self.enable_project_drop(source_frame, project_box)
 
         self.output_path = ctk.StringVar(self.app, name="OUTPUT_PATH")
@@ -66,9 +92,14 @@ class ConvertFrame(ctk.CTkFrame):
         content.grid(column=0, row=1, sticky="nsew", padx=28, pady=(0, 28))
 
         source_frame.grid(column=0, row=0, sticky="ew", pady=(0, 14))
-        project_label.grid(column=0, row=1, sticky="w", padx=16, pady=(2, 4))
-        project_box.grid(column=0, row=2, sticky="ew", padx=(16, 8), pady=(0, 16))
-        project_button.grid(column=1, row=2, sticky="ew", padx=(0, 16), pady=(0, 16))
+        mode_control.grid(column=0, row=1, sticky="w", padx=16, pady=(2, 12))
+        project_label.grid(column=0, row=2, sticky="w", padx=16, pady=(2, 4))
+        project_box.grid(column=0, row=3, sticky="ew", padx=(16, 8), pady=(0, 16))
+        project_buttons.grid(column=1, row=3, sticky="ew", padx=(0, 16), pady=(0, 16))
+        project_file_button.grid(column=0, row=0, sticky="ew", padx=(0, 6))
+        project_folder_button.grid(column=1, row=0, sticky="ew")
+        url_label.grid(column=0, row=2, sticky="w", padx=16, pady=(2, 4))
+        url_box.grid(column=0, row=3, sticky="ew", padx=16, pady=(0, 16), columnspan=2)
 
         output_frame.grid(column=0, row=1, sticky="ew", pady=(0, 18))
         folder_label.grid(column=0, row=1, sticky="w", padx=16, pady=(2, 4))
@@ -84,12 +115,22 @@ class ConvertFrame(ctk.CTkFrame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
+        self.project_widgets = (project_label, project_box, project_buttons)
+        self.url_widgets = (url_label, url_box)
+        self.update_source_mode()
+
     def browse_project(self):
         """Show a dialog to select the project file"""
         project_path = filedialog.askopenfilename(
             filetypes=[("Project Files", "*.sb3"),
                        ("Zip Files", "*.zip"),
                        ("All Files", "*.*")])
+        if project_path:
+            self.set_project_path(project_path)
+
+    def browse_project_folder(self):
+        """Show a dialog to select an extracted project folder."""
+        project_path = filedialog.askdirectory()
         if project_path:
             self.set_project_path(project_path)
 
@@ -117,9 +158,30 @@ class ConvertFrame(ctk.CTkFrame):
 
     def set_project_path(self, project_path):
         """Set the selected local project and clear remote-project state."""
+        self.source_mode.set("Directory")
         self.app.setvar("PROJECT_PATH", project_path)
         self.app.setvar("PROJECT_URL", "")
         self.app.setvar("JSON_SHA", False)
+
+    def set_project_url(self, project_url):
+        """Set the selected remote project and clear local-project state."""
+        self.source_mode.set("URL")
+        self.app.setvar("PROJECT_URL", project_url.strip())
+        self.app.setvar("PROJECT_PATH", "")
+        self.app.setvar("JSON_SHA", False)
+
+    def update_source_mode(self, *_):
+        """Switch between local-directory/file and URL source controls."""
+        if self.source_mode.get() == "URL":
+            for widget in self.project_widgets:
+                widget.grid_remove()
+            for widget in self.url_widgets:
+                widget.grid()
+        else:
+            for widget in self.url_widgets:
+                widget.grid_remove()
+            for widget in self.project_widgets:
+                widget.grid()
 
     @staticmethod
     def drop_paths(data, splitlist):
@@ -136,7 +198,8 @@ class ConvertFrame(ctk.CTkFrame):
     def choose_project_path(paths):
         """Return the first dropped Scratch project path."""
         for project_path in paths:
-            if ospath.splitext(project_path)[1].lower() in {".sb3", ".zip"}:
+            if (ospath.isdir(project_path) or
+                    ospath.splitext(project_path)[1].lower() in {".sb3", ".zip"}):
                 return project_path
         return ""
 
@@ -149,7 +212,10 @@ class ConvertFrame(ctk.CTkFrame):
     def convert(self):
         """Run the converter"""
         self.app.setvar("AUTORUN", True)
-        self.app.setvar("PROJECT_URL", "")
+        if self.source_mode.get() == "URL":
+            self.set_project_url(self.project_url.get())
+        else:
+            self.set_project_path(self.project_path.get())
         self.app.setvar("JSON_SHA", False)
         self.app.setvar("PARSE_PROJECT", True)
         self.app.setvar("COPY_ENGINE", True)

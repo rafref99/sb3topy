@@ -138,7 +138,14 @@ class Events:
         # Save and return the parent task
         task = asyncio.create_task(self._handle_tasks(tasks))
         self.events[event] = task
+        task.add_done_callback(
+            lambda done_task, event_name=event: self._discard_event_task(event_name, done_task))
         return task
+
+    def _discard_event_task(self, event: str, task: asyncio.Task):
+        """Remove a completed parent task if it is still current."""
+        if self.events.get(event) is task:
+            self.events.pop(event, None)
 
     def send(self, util: 'Util', sprites: 'Sprites', event: str, restart: bool = False):
         """Starts an event for all sprites. Cannot be awaited."""
@@ -168,10 +175,11 @@ class Events:
         if not tasks:
             return
 
-        done, _ = await asyncio.wait(
+        done, pending = await asyncio.wait(
             tasks, return_when=asyncio.FIRST_EXCEPTION)
 
         # Handle any errors
+        should_cancel_pending = False
         for task in done:
             try:
                 task.result()
@@ -179,6 +187,13 @@ class Events:
                 pass
             except Exception:  # pylint: disable=broad-except
                 logging.exception("Error in gathered task '%s'", task)
+                should_cancel_pending = True
+
+        if should_cancel_pending:
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
     def broadcast(self, util: 'Util', sprites: 'Sprites', event: str):
         """Parses a broadcast name and sends it. Not awaitable."""

@@ -2,6 +2,74 @@
 
 This file documents the changes and improvements made during the project rework.
 
+## [2026-05-11] - Engine Correctness and Rendering Performance Pass
+
+### Engine Runtime Fixes
+- Fixed `Target.size` to use the `Costumes.size` property setter instead of calling a missing private method.
+- Fixed zero-duration glides so they move instantly instead of dividing by zero.
+- Fixed `when timer >` event wrappers to await async Scratch scripts and trigger once per false-to-true threshold crossing.
+
+### Rendering Performance
+- Added dirty-rect rendering for unchanged stages by redrawing only changed sprite, pen, and monitor regions.
+- Kept a full-frame redraw fallback for initial draws, stage changes, and forced renderer invalidation.
+- Added renderer invalidation heuristics that promote fragmented or high-area dirty regions to a full redraw.
+- Added lightweight renderer profiling counters for frames, dirty frames, full redraws, dirty rect count, and dirty area.
+- Forced full redraws for debug overlays so FPS, sprite rect, redraw rect, and pen rect diagnostics do not smear over previous frames.
+
+### Costume Performance
+- Added shared transformed-costume caching keyed by costume asset, size, display scale, rotation style/direction, and active graphic effects.
+
+### Monitor Improvements
+- Reworked variable monitors with closer Scratch styling, cached scaling, large readout mode, and slider rendering.
+- Added slider monitor interaction so dragging updates the backing Scratch variable.
+- Reworked list monitors with cached scaling, visible item windowing, scroll-wheel support, length display, and scrollbar rendering.
+- Fixed `show variable/list` and `hide variable/list` monitor lookup so list monitors are handled correctly.
+- Added dirty-region behavior for monitor show/hide, value changes, slider changes, and list scrolling.
+
+### Scratch Compatibility
+- Implemented `bounce_on_edge()` with stage-bound detection, direction reflection, and repositioning back inside the stage.
+- Replaced placeholder fisheye and whirl graphic effects with NumPy-backed pixel remapping, while keeping a no-crash fallback when NumPy is unavailable.
+- Installed NumPy into the local Python 3.12 environment so fisheye and whirl effect tests execute instead of skipping.
+- Added runtime support for Scratch target compatibility properties: `draggable`, `tempo`, `videoState`, `videoTransparency`, and `textToSpeechLanguage`.
+- Updated generated target initialization to preserve those Scratch project properties when present in `project.json`.
+
+### Event Scheduling
+- Cleaned up completed parent event tasks so finished broadcasts no longer remain in the event registry.
+- Cancelled sibling event tasks when one receiver raises, avoiding dangling broadcast-and-wait work after an exception.
+
+### GUI Conversion Sources
+- Added a Convert tab source switch for local directory/file sources versus Scratch project URLs.
+- Added URL conversion support in the Convert tab by preserving `PROJECT_URL` and clearing `PROJECT_PATH` before launching the existing download-and-convert pipeline.
+- Added local extracted-project directory support alongside `.sb3` and `.zip` files.
+- Added backend extraction support for directories containing `project.json` and project assets.
+
+### Sensing Compatibility
+- Added parser support for Scratch color picker literals so color inputs no longer warn as unknown literal types.
+- Implemented `touching color` and `color is touching color` runtime sensing using visible sprite, stage, and pen pixels.
+- Patched the exported `~/Downloads/clicker_game/` engine copy with the color-sensing runtime support.
+- Patched the already-generated `~/Downloads/clicker_game/project.py` power-generation branch that had been compiled as `if False` before color sensing support existed.
+
+### Large Project Conversion Compatibility
+- Added numeric-to-boolean reporter wrapping so int, float, string, and unknown reporter values used in boolean slots no longer warn as unsupported casts.
+- Added generated support for built-in reporter monitors including x position, y position, direction, and timer.
+- Added runtime `ReporterMonitor` support so built-in reporter monitors update from sprite position, direction, and runtime timer values.
+- Normalized custom block argument names during prototype lookup so Scratch/TurboWarp projects with saved newline or spacing differences no longer warn about missing custom block arguments.
+- Added compatibility aliases for TurboWarp-style orphan `is TurboWarp?` boolean reporters and legacy `x`/`y` reporter names inside advanced custom blocks.
+- Fixed current date/time reporter generation to use Python `struct_time` attributes, avoiding startup crashes in projects that use current month/day/year reporters.
+- Added cached monitor font fallback so missing platform fonts do not crash exported projects or exhaust file handles when many monitors are created.
+- Patched the already-exported DarkOrbit example with the current-month and monitor-font startup fixes for immediate retesting.
+- Fixed `point_towards()` to wrap through the Scratch direction setter, preventing unwrapped 270-degree directions from selecting wrong directional costume frames.
+- Added case-insensitive sprite lookup fallback for generated Scratch menu references, fixing lowercase references such as `crosshair_locked` so range checks, aiming, and shot collision use the intended sprite.
+- Patched the already-exported DarkOrbit engine copy with the direction wrapping and sprite lookup fixes.
+
+### Backlog Updates
+- Removed the completed static-stage dirty-rect item from `TODO.md`.
+- Removed the completed monitor improvement item from `TODO.md`.
+- Removed completed `bounce_on_edge()`, fisheye, and whirl compatibility items from `TODO.md`.
+- Removed completed missing-target-property compatibility work from `TODO.md`.
+- Added unfinished scheduling and real-project renderer benchmark work to `TODO.md`.
+- Added live Scratch cloud variable synchronization to `TODO.md`; current converted cloud variables are local-only.
+
 ## [2026-04-25] - Generated Project Runtime Compatibility Fixes
 
 ### Parser and Generated Code Fixes

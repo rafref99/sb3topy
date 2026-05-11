@@ -123,6 +123,10 @@ def cast_literal(value: Any, to_type: str) -> str:
     if to_type == 'any':
         return str(quote_number(value))
 
+    # Scratch color picker literals are hex strings such as "#ff00aa".
+    if to_type == "color":
+        return quote_string(value)
+
     # Default behavior
     logger.warning("Unknown literal type '%s'", to_type)
     if value in (True, False, None):
@@ -168,6 +172,12 @@ def cast_wrapper(value: str, from_type: str, to_type: str) -> str:
     # Handle blank bool inputs
     if to_type == 'bool' and from_type == 'none':
         return 'False'
+
+    # Scratch treats numeric reporter values in boolean slots as truthy
+    # unless they are zero. Python's bool() gives the same behavior for
+    # numeric expressions and avoids dropping those inputs.
+    if to_type == 'bool' and from_type in ('int', 'float', 'str', 'any'):
+        return "bool(" + value + ")"
 
     logger.warning("Unknown cast wrap for '%s' to '%s'", from_type, to_type)
 

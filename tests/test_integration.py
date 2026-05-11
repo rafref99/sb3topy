@@ -1,7 +1,9 @@
 import unittest
 import os
 import shutil
-from sb3topy import main
+import tempfile
+import zipfile
+from sb3topy import main, project as project_helpers, unpacker
 
 class IntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -24,6 +26,21 @@ class IntegrationTests(unittest.TestCase):
         result = main.main(['sb3topy', project_path, self.output_dir])
         self.assertTrue(result)
         self.assertTrue(os.path.exists(os.path.join(self.output_dir, "project.py")))
+
+    def test_extract_project_from_directory(self):
+        project_path = "tests/minimal.sb3"
+        if not os.path.exists(project_path):
+            self.skipTest(f"Project file {project_path} not found.")
+
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            with zipfile.ZipFile(project_path) as project_zip:
+                project_zip.extractall(source_dir)
+
+            manifest = project_helpers.Manifest(output_dir)
+            sb3 = unpacker.extract_project(manifest, source_dir)
+
+            self.assertTrue(sb3.is_sb3())
+            self.assertTrue(os.path.isdir(os.path.join(output_dir, "assets")))
 
 if __name__ == '__main__':
     unittest.main()

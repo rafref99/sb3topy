@@ -14,6 +14,11 @@ from ..config import STAGE_SIZE
 
 logger = logging.getLogger(__name__)
 
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover - exercised only without optional dependency
+    np = None
+
 if TYPE_CHECKING:
     pass
 
@@ -52,6 +57,7 @@ class Costumes:
 
     redraw_requested: bool = False
     _cache: Dict[str, pg.Surface] = {}
+    _transform_cache: Dict[Tuple[Any, ...], Tuple[pg.Surface, pg.Surface]] = {}
 
     def __init__(self, costume_number: int, size: float,
                  rotation_style: str, costumes: List[Dict[str, Any]],
@@ -243,6 +249,26 @@ class Costumes:
         self.dirty = True
         Costumes.redraw_requested = True
 
+    def _transform_cache_key(self, display: Any, direction: float) -> Tuple[Any, ...]:
+        """Return a stable key for the transformed costume surface."""
+        if self.rotation_style == "all around":
+            direction_key = round(direction, 3)
+        elif self.rotation_style == "left-right":
+            direction_key = direction < 0
+        else:
+            direction_key = None
+
+        return (
+            self.costume.get('path', id(self.costume['image'])),
+            self.number,
+            round(self._size, 3),
+            round(float(display.scale), 6),
+            self.rotation_style,
+            direction_key,
+            tuple(sorted((name, round(float(value), 3))
+                         for name, value in self.effects.items())),
+        )
+
     def _apply_effects(self, image: pg.Surface) -> pg.Surface:
         """Apply current effects to an image"""
         # Pixelate
@@ -301,9 +327,6 @@ class Costumes:
             color_val = 360 * color / 200
             image = hue_effect(image, color_val)
 
-        # Fisheye and Whirl (Placeholder/Simulated)
-        # These typically require pixel-level mapping (e.g. using numpy or pygame.surfarray)
-        # For now, we'll implement simple versions if numpy is available
         fisheye = self.effects.get('fisheye', 0.0)
         if fisheye != 0:
             image = self._apply_fisheye(image, fisheye)
@@ -315,20 +338,51 @@ class Costumes:
         return image
 
     def _apply_fisheye(self, image: pg.Surface, value: float) -> pg.Surface:
-        """Apply a simple fisheye effect"""
-        # A true fisheye is complex; for now we can simulate it with a slight scale-up
-        # in the center if we had more time, but let's try a basic implementation
-        # that doesn't tank performance.
-        return image
+        """Apply a radial fisheye effect."""
+        if np is None:
+            logger.warning("Fisheye effect requires numpy; leaving image unchanged.")
+            return image
+
+        strength = max(-100.0, min(100.0, float(value))) / 100.0
+        if strength == 0.0:
+            return image
+
+        width, height = image.get_size()
+        x_grid, y_grid, radius, theta = _surface_polar_grid(width, height)
+        valid = radius <= 1.0
+
+        if strength > 0:
+            mapped_radius = radius ** (1.0 + strength * 1.8)
+        else:
+            mapped_radius = radius ** (1.0 / (1.0 + abs(strength) * 1.8))
+
+        source_x = mapped_radius * np.cos(theta) * max(width - 1, 1) / 2.0 + (width - 1) / 2.0
+        source_y = mapped_radius * np.sin(theta) * max(height - 1, 1) / 2.0 + (height - 1) / 2.0
+        return _remap_surface(image, source_x, source_y, valid, x_grid, y_grid)
 
     def _apply_whirl(self, image: pg.Surface, value: float) -> pg.Surface:
-        """Apply a simple whirl effect"""
-        # A true whirl is complex; for now return as-is until a robust
-        # pixel-mapping implementation is ready.
-        return image
+        """Apply a radial whirl effect."""
+        if np is None:
+            logger.warning("Whirl effect requires numpy; leaving image unchanged.")
+            return image
+
+        width, height = image.get_size()
+        x_grid, y_grid, radius, theta = _surface_polar_grid(width, height)
+        valid = radius <= 1.0
+        twist = np.radians(float(value)) * (1.0 - np.minimum(radius, 1.0))
+        source_theta = theta - twist
+        source_x = radius * np.cos(source_theta) * max(width - 1, 1) / 2.0 + (width - 1) / 2.0
+        source_y = radius * np.sin(source_theta) * max(height - 1, 1) / 2.0 + (height - 1) / 2.0
+        return _remap_surface(image, source_x, source_y, valid, x_grid, y_grid)
 
     def get_image(self, display: Any, direction: float) -> pg.Surface:
         """Get the current image with a size and direction"""
+        cache_key = self._transform_cache_key(display, direction)
+        cached = self._transform_cache.get(cache_key)
+        if cached is not None:
+            self.last_image = cached[0]
+            return cached[1]
+
         # Get the base image
         image = self.costume['image']
 
@@ -352,7 +406,10 @@ class Costumes:
         self.last_image = image
 
         # Apply effects
-        image = self._apply_effects(image)
+        if self.effects:
+            image = self._apply_effects(image.copy())
+
+        self._transform_cache[cache_key] = (self.last_image, image)
 
         return image
 
@@ -409,3 +466,48 @@ def hue_effect(src_image: pg.Surface, value: float) -> pg.Surface:
     image.blit(transparency, (0, 0), special_flags=pg.BLEND_RGBA_MULT)
 
     return image
+
+
+def _surface_polar_grid(width: int, height: int):
+    """Return cartesian and polar coordinate grids for a surface."""
+    x_grid, y_grid = np.meshgrid(
+        np.arange(width, dtype=np.float64),
+        np.arange(height, dtype=np.float64),
+        indexing='ij',
+    )
+    center_x = (width - 1) / 2.0
+    center_y = (height - 1) / 2.0
+    norm_x = (x_grid - center_x) / max(width - 1, 1) * 2.0
+    norm_y = (y_grid - center_y) / max(height - 1, 1) * 2.0
+    radius = np.sqrt(norm_x * norm_x + norm_y * norm_y)
+    theta = np.arctan2(norm_y, norm_x)
+    return x_grid, y_grid, radius, theta
+
+
+def _remap_surface(
+        image: pg.Surface,
+        source_x,
+        source_y,
+        valid,
+        x_grid,
+        y_grid) -> pg.Surface:
+    """Remap a surface using nearest-neighbor source coordinates."""
+    source = image.convert_alpha()
+    rgb = pg.surfarray.array3d(source)
+    alpha = pg.surfarray.array_alpha(source)
+
+    src_x = np.rint(source_x).astype(np.int64).clip(0, image.get_width() - 1)
+    src_y = np.rint(source_y).astype(np.int64).clip(0, image.get_height() - 1)
+    dst_x = x_grid.astype(np.int64)
+    dst_y = y_grid.astype(np.int64)
+
+    out_rgb = rgb.copy()
+    out_alpha = alpha.copy()
+    out_rgb[dst_x[valid], dst_y[valid]] = rgb[src_x[valid], src_y[valid]]
+    out_alpha[dst_x[valid], dst_y[valid]] = alpha[src_x[valid], src_y[valid]]
+
+    result = pg.surfarray.make_surface(out_rgb).convert_alpha()
+    result_alpha = pg.surfarray.pixels_alpha(result)
+    result_alpha[:, :] = out_alpha
+    del result_alpha
+    return result

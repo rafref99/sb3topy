@@ -51,6 +51,7 @@ class Runtime:
 
         # Create util for project.py
         self.util = Util(self)
+        self.sprites.util = self.util
 
         # Update sprite images
         self.sprites.update(self.display)
@@ -130,9 +131,11 @@ class Runtime:
                 self.inputs.e_mousedown(
                     self.util, self.events, self.sprites, event)
             elif event.type == pg.MOUSEBUTTONUP:
-                self.inputs.e_mouseup(event)
+                self.inputs.e_mouseup(self.sprites, event)
             elif event.type == pg.MOUSEMOTION:
-                self.inputs.e_mousemotion(self.display, event)
+                self.inputs.e_mousemotion(self.display, self.sprites, event)
+            elif event.type == pg.MOUSEWHEEL:
+                self.inputs.e_mousewheel(self.display, self.sprites, event)
 
             elif event.type == pg.VIDEORESIZE:
                 self.display.video_resize(event)
@@ -156,6 +159,10 @@ class Runtime:
 
     def draw(self):
         """Renders costumes and draws the screen"""
+        if (config.SPRITE_RECTS or config.REDRAW_RECTS or
+                config.PEN_RECTS or config.DRAW_FPS):
+            self.render.request_full_redraw()
+
         self.sprites.update(self.display)
         self.render.draw(self.display)
 
@@ -195,9 +202,11 @@ class Sprites:
 
     def __init__(self, targets):
         self.targets = {}
+        self._target_lookup = {}
         self.group = pg.sprite.LayeredDirty()
         self.stage = None
         self.monitors = []
+        self.util = None
 
         # Init Targets, loading assets
         for name, target in targets.items():
@@ -206,10 +215,19 @@ class Sprites:
                 self.stage = target
             else:
                 self.targets[name] = target
+                self._target_lookup.setdefault(str(name).casefold(), target)
                 self.group.add(target.sprite)
 
     def __getitem__(self, key):
-        return self.targets[key]
+        if key in self.targets:
+            return self.targets[key]
+        return self._target_lookup[str(key).casefold()]
+
+    def get_target(self, key, default=None):
+        """Return a sprite by exact name, falling back to Scratch menu casing."""
+        if key in self.targets:
+            return self.targets[key]
+        return self._target_lookup.get(str(key).casefold(), default)
 
     def sprites(self):
         """Returns a iter of pygame sprites, top to bottom"""
@@ -233,22 +251,59 @@ class Sprites:
 
         # Update monitors
         for monitor in self.monitors:
-            monitor.update(display)
+            try:
+                monitor.update(display, self.util)
+            except TypeError:
+                monitor.update(display)
 
     def monitors_show(self, m_type, name):
         """Shows a monitor"""
         # Note: 'name' is the cleaned variable name
         for monitor in self.monitors:
-            if monitor.varname == name:
+            if monitor.kind == m_type and monitor.monitor_name == name:
                 monitor.visible = True
                 monitor.dirty = 2
 
     def monitors_hide(self, m_type, name):
         """Hides a monitor"""
         for monitor in self.monitors:
-            if monitor.varname == name:
+            if monitor.kind == m_type and monitor.monitor_name == name:
                 monitor.visible = False
                 monitor.dirty = 2
+
+    def monitors_mouse_down(self, display, pos):
+        """Give monitors first chance to consume a mouse down."""
+        for monitor in reversed(self.monitors):
+            handler = getattr(monitor, "handle_mouse_down", None)
+            if handler is not None and handler(display, pos):
+                return True
+        return False
+
+    def monitors_mouse_motion(self, display, pos):
+        """Update any active monitor interaction."""
+        handled = False
+        for monitor in self.monitors:
+            handler = getattr(monitor, "handle_mouse_motion", None)
+            if handler is not None and handler(display, pos):
+                handled = True
+        return handled
+
+    def monitors_mouse_up(self):
+        """Finish any active monitor interaction."""
+        handled = False
+        for monitor in self.monitors:
+            handler = getattr(monitor, "handle_mouse_up", None)
+            if handler is not None and handler():
+                handled = True
+        return handled
+
+    def monitors_scroll(self, amount, pos):
+        """Scroll the topmost list monitor under the pointer."""
+        for monitor in reversed(self.monitors):
+            handler = getattr(monitor, "handle_scroll", None)
+            if handler is not None and handler(amount, pos):
+                return True
+        return False
 
 
 def start_program(setup=None):

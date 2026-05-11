@@ -14,6 +14,14 @@ from .. import sanitizer, targets
 logger = logging.getLogger(__name__)
 
 
+REPORTER_MONITORS = {
+    "motion_xposition": ("x position", "xpos"),
+    "motion_yposition": ("y position", "ypos"),
+    "motion_direction": ("direction", "direction"),
+    "sensing_timer": ("timer", "timer"),
+}
+
+
 def create_header(target: targets.Target) -> str:
     """Creates code between "class ...:" and "def __init__" """
 
@@ -30,7 +38,7 @@ def file_header() -> str:
         "import time\n\n"
         "import engine\n"
         "from engine.events import *\n"
-        "from engine.monitors import Monitor, ListMonitor\n"
+        "from engine.monitors import Monitor, ListMonitor, ReporterMonitor\n"
         "from engine.operators import *\n"
         "from engine.types import *"
     )
@@ -61,12 +69,23 @@ def create_init(target: targets.Target, manifest: Any) -> str:
         "self._xpos = {xpos}\n"
         "self._ypos = {ypos}\n"
         "self._direction = {direction}\n"
+        "self.draggable = {draggable}\n"
+        "self.tempo = {tempo}\n"
+        "self.videoState = {video_state}\n"
+        "self.videoTransparency = {video_transparency}\n"
+        "self.textToSpeechLanguage = {tts_language}\n"
         "self.shown = {visible}\n"
         "self.pen = Pen(self)"
     ).format(
         xpos=target.get('x', 0),
         ypos=target.get('y', 0),
         direction=target.get('direction', 90),
+        draggable=target.get('draggable', False),
+        tempo=target.get('tempo', 60),
+        video_state=sanitizer.quote_string(target.get('videoState', 'off')),
+        video_transparency=target.get('videoTransparency', 50),
+        tts_language=("None" if target.get('textToSpeechLanguage') is None
+                      else sanitizer.quote_string(target.get('textToSpeechLanguage'))),
         visible=target.get('visible', True)
     ) + "\n\n"
 
@@ -311,7 +330,7 @@ def parse_monitors(monitors: List[Dict[str, Any]], targets: targets.Targets) -> 
             monitor_init.append((
                 "SPRITES.monitors.append(Monitor(\n"
                 "    {name}, {target}, {varname},\n"
-                "    {x}, {y}, {visible}, {mode}\n"
+                "    {x}, {y}, {visible}, {mode}, {slider_min}, {slider_max}\n"
                 "))"
             ).format(
                 name=sanitizer.quote_string(target.vars.local_ids.get(monitor['params']['VARIABLE'], monitor['params']['VARIABLE'])),
@@ -320,7 +339,25 @@ def parse_monitors(monitors: List[Dict[str, Any]], targets: targets.Targets) -> 
                 x=monitor['x'],
                 y=monitor['y'],
                 visible=monitor['visible'],
-                mode=sanitizer.quote_string(monitor['mode'])
+                mode=sanitizer.quote_string(monitor['mode']),
+                slider_min=monitor.get('sliderMin', 0),
+                slider_max=monitor.get('sliderMax', 100),
+            ))
+        elif monitor.get('opcode') in REPORTER_MONITORS:
+            reporter_name, reporter_attr = REPORTER_MONITORS[monitor['opcode']]
+            monitor_init.append((
+                "SPRITES.monitors.append(ReporterMonitor(\n"
+                "    {name}, {target}, {reporter},\n"
+                "    {x}, {y}, {visible}, {mode}\n"
+                "))"
+            ).format(
+                name=sanitizer.quote_string(reporter_name),
+                target=clean_target,
+                reporter=sanitizer.quote_string(reporter_attr),
+                x=monitor['x'],
+                y=monitor['y'],
+                visible=monitor['visible'],
+                mode=sanitizer.quote_string(monitor.get('mode', 'default')),
             ))
         else:
             logger.warning("Skipping unsupported monitor '%s' with opcode '%s'",

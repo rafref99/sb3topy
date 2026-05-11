@@ -6,6 +6,7 @@ Contains decorators used to bind functions to events
 TODO Clean up event names
 """
 from functools import wraps
+import inspect
 
 from .types import Target
 
@@ -58,16 +59,19 @@ def on_backdrop(backdrop):
     return decorator
 
 
-# TODO Proper when timer greater behavior
 def on_greater(source, value=None):
     """Binds a function the the timer greater than event"""
     def decorator(func):
         @wraps(func)
         async def wrapper(self, util):
-            # Run func when the timer is greater
+            was_greater = False
             while True:
-                if value is None or util.timer() > value:
-                    func(self, util)
+                is_greater = value is None or util.timer() > value
+                if is_greater and not was_greater:
+                    result = func(self, util)
+                    if inspect.isawaitable(result):
+                        await result
+                was_greater = is_greater
                 await self.yield_()
 
         # Return the timer wrapper

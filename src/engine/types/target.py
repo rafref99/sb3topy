@@ -37,6 +37,13 @@ if TYPE_CHECKING:
     from ..util import Util
 
 
+def _lookup_target(util: 'Util', name: Any, default: Optional['Target'] = None) -> Optional['Target']:
+    sprites = getattr(util, "sprites", None)
+    if sprites is not None and hasattr(sprites, "get_target"):
+        return sprites.get_target(name, default)
+    return getattr(sprites, "targets", {}).get(name, default)
+
+
 class Target:
     """Holds common code for targets
 
@@ -71,12 +78,6 @@ class Target:
         need_redraw: Used to determine if any targets need to be
             redrawn
 
-    TODO Missing Target properties:
-        draggable = False
-        tempo = 60
-        videoTransparency = 50
-        videoState
-        textToSpeechLanguage
     """
 
     # Clones for all sprites
@@ -123,6 +124,12 @@ class Target:
         # Used to determine if this is a clone
         self.is_clone = parent is not None
 
+        self.draggable = False
+        self.tempo = 60
+        self.video_state = "off"
+        self.video_transparency = 50
+        self.text_to_speech_language: Optional[str] = None
+
         # Create the pygame sprite
         self.sprite = DirtySprite()
         setattr(self.sprite, 'target', self)
@@ -147,11 +154,50 @@ class Target:
             self._ypos = parent._ypos
             self._direction = parent._direction
             self._shown = parent._shown
+            self.draggable = getattr(parent, "draggable", False)
+            self.tempo = getattr(parent, "tempo", 60)
+            self.video_state = getattr(parent, "video_state", "off")
+            self.video_transparency = getattr(parent, "video_transparency", 50)
+            self.text_to_speech_language = getattr(
+                parent, "text_to_speech_language", None)
             self.sprite.visible = parent.sprite.visible
             self.pen = parent.pen.copy(self)
 
             self.costume = parent.costume.copy()
             self.sounds = parent.sounds.copy()
+
+    @property
+    def videoState(self) -> str:  # pylint: disable=invalid-name
+        """Scratch-compatible camelCase video state property."""
+        return self.video_state
+
+    @videoState.setter
+    def videoState(self, value: Any):  # pylint: disable=invalid-name
+        value = str(value).lower()
+        if value in ("on", "off", "on-flipped"):
+            self.video_state = value
+
+    @property
+    def videoTransparency(self) -> float:  # pylint: disable=invalid-name
+        """Scratch-compatible camelCase video transparency property."""
+        return self.video_transparency
+
+    @videoTransparency.setter
+    def videoTransparency(self, value: Any):  # pylint: disable=invalid-name
+        try:
+            transparency = float(value)
+        except (TypeError, ValueError):
+            return
+        self.video_transparency = max(0.0, min(100.0, transparency))
+
+    @property
+    def textToSpeechLanguage(self) -> Optional[str]:  # pylint: disable=invalid-name
+        """Scratch-compatible camelCase text-to-speech language property."""
+        return self.text_to_speech_language
+
+    @textToSpeechLanguage.setter
+    def textToSpeechLanguage(self, value: Any):  # pylint: disable=invalid-name
+        self.text_to_speech_language = None if value in (None, "") else str(value)
 
     @property
     def xpos(self) -> float:
@@ -242,22 +288,21 @@ class Target:
             xpos = float(util.inputs.mouse_x)
             ypos = float(util.inputs.mouse_y)
         else:
-            other_target = util.sprites.targets.get(other, self)
+            other_target = _lookup_target(util, other, self)
             xpos = float(other_target.xpos)
             ypos = float(other_target.ypos)
 
         # Calculate the angle to point in
         xpos -= self.xpos
         ypos -= self.ypos
-        self._direction = 90 - math.degrees(math.atan2(ypos, xpos))
-
-        # Set dirty
-        self.costume.dirty = True
-        if self.sprite.visible:
-            Costumes.redraw_requested = True
+        self.direction = 90 - math.degrees(math.atan2(ypos, xpos))
 
     async def glide(self, duration: float, endx: float, endy: float):
         """Glides to a position"""
+        if duration <= 0:
+            self.gotoxy(endx, endy)
+            return
+
         start_time = time.monotonic()
         elapsed = 0.0
         startx, starty = self.xpos, self.ypos
@@ -294,15 +339,77 @@ class Target:
                 config.STAGE_SIZE[1] * (random.random() - 0.5),
             )
 
-        target = util.sprites.targets.get(other)
+        target = _lookup_target(util, other)
         if target:
             return (target._xpos, target._ypos)
 
         return None
 
     def bounce_on_edge(self):
-        """If on edge, bounce. Not implemented."""
-        # TODO Bounce on edge
+        """If on edge, reflect direction and keep the sprite on stage."""
+        left, right, top, bottom = self._stage_bounds()
+        stage_w, stage_h = config.STAGE_SIZE
+        min_x = -stage_w / 2
+        max_x = stage_w / 2
+        min_y = -stage_h / 2
+        max_y = stage_h / 2
+
+        hit_vertical = left < min_x or right > max_x
+        hit_horizontal = bottom < min_y or top > max_y
+        if not hit_vertical and not hit_horizontal:
+            return
+
+        dx = math.sin(math.radians(self._direction))
+        dy = math.cos(math.radians(self._direction))
+        if hit_vertical:
+            dx = -dx
+        if hit_horizontal:
+            dy = -dy
+        self.direction = math.degrees(math.atan2(dx, dy))
+
+        shift_x = 0.0
+        shift_y = 0.0
+        if left < min_x:
+            shift_x = min_x - left
+        elif right > max_x:
+            shift_x = max_x - right
+        if bottom < min_y:
+            shift_y = min_y - bottom
+        elif top > max_y:
+            shift_y = max_y - top
+        if shift_x or shift_y:
+            self.gotoxy(self._xpos + shift_x, self._ypos + shift_y)
+
+    def _stage_bounds(self) -> Tuple[float, float, float, float]:
+        """Return approximate sprite bounds in Scratch stage coordinates."""
+        costume = self.costume
+        image = costume.costume['image']
+        width = image.get_width() / costume.costume['scale'] * (costume.size / 100)
+        height = image.get_height() / costume.costume['scale'] * (costume.size / 100)
+        center = pg.math.Vector2(width / 2, height / 2)
+        offset = costume.costume['offset'] * (costume.size / 100)
+
+        corners = [
+            pg.math.Vector2(0, 0) - center,
+            pg.math.Vector2(width, 0) - center,
+            pg.math.Vector2(width, height) - center,
+            pg.math.Vector2(0, height) - center,
+        ]
+        if costume.rotation_style == "all around":
+            corners = [corner.rotate(self._direction - 90) for corner in corners]
+            offset = offset.rotate(self._direction - 90)
+        elif costume.rotation_style == "left-right" and self._direction < 0:
+            corners = [pg.math.Vector2(-corner.x, corner.y) for corner in corners]
+            offset = pg.math.Vector2(-offset.x, offset.y)
+
+        stage_corners = [
+            pg.math.Vector2(self._xpos, self._ypos) + offset +
+            pg.math.Vector2(corner.x, -corner.y)
+            for corner in corners
+        ]
+        xs = [corner.x for corner in stage_corners]
+        ys = [corner.y for corner in stage_corners]
+        return min(xs), max(xs), max(ys), min(ys)
 
     @property
     def rotation_style(self) -> str:
@@ -326,7 +433,7 @@ class Target:
 
     @size.setter
     def size(self, value: float):
-        self.costume._set_size(value)
+        self.costume.size = value
 
         # Set dirty
         self.costume.dirty = True
@@ -339,7 +446,7 @@ class Target:
             xpos = float(util.inputs.mouse_x)
             ypos = float(util.inputs.mouse_y)
         else:
-            other_target = util.sprites.targets.get(other, self)
+            other_target = _lookup_target(util, other, self)
             xpos = float(other_target.xpos)
             ypos = float(other_target.ypos)
         return math.sqrt((self.xpos - xpos)**2 + (self.ypos - ypos)**2)
@@ -492,7 +599,7 @@ class Target:
             except (IndexError, AttributeError):
                 return False
 
-        other_target = util.sprites.targets.get(other)
+        other_target = _lookup_target(util, other)
         if not other_target:
             return False
 
@@ -515,6 +622,69 @@ class Target:
             # Check if touching a clone
             if clone.shown and pg.sprite.collide_mask(self.sprite, clone.sprite):
                 return True
+        return False
+
+    def get_touching_color(self, util: 'Util', color: Any) -> bool:
+        """Check if any visible pixel of this sprite touches a stage color."""
+        return self._color_touching_color(util, None, color)
+
+    def get_color_touching_color(self, util: 'Util', color: Any, other_color: Any) -> bool:
+        """Check if this sprite's color touches another color on the stage."""
+        return self._color_touching_color(util, color, other_color)
+
+    def _color_touching_color(
+            self,
+            util: 'Util',
+            source_color: Optional[Any],
+            target_color: Any) -> bool:
+        self.update(util.display)
+        if not self.shown:
+            return False
+
+        target = _parse_color(target_color)
+        source = _parse_color(source_color) if source_color is not None else None
+        image = self.sprite.image
+        rect = self.sprite.rect
+        width, height = image.get_size()
+
+        for x in range(width):
+            for y in range(height):
+                pixel = image.get_at((x, y))
+                if pixel.a == 0:
+                    continue
+                if source is not None and not _colors_match(pixel, source):
+                    continue
+
+                point = (rect.x + x, rect.y + y)
+                if self._screen_point_has_color(util, point, target):
+                    return True
+        return False
+
+    def _screen_point_has_color(
+            self,
+            util: 'Util',
+            point: Tuple[int, int],
+            color: pg.Color) -> bool:
+        """Return whether the rendered scene, excluding self, has color at point."""
+        for sprite in reversed(util.sprites.group.sprites()):
+            if sprite is self.sprite or not sprite.visible:
+                continue
+            if _sprite_point_matches_color(sprite, point, color):
+                return True
+
+        stage_sprite = util.sprites.stage.sprite
+        if stage_sprite is not self.sprite and _sprite_point_matches_color(stage_sprite, point, color):
+            return True
+
+        pen_image = Pen.image
+        if pen_image is not None:
+            x = point[0] - util.display.rect.x
+            y = point[1] - util.display.rect.y
+            if 0 <= x < pen_image.get_width() and 0 <= y < pen_image.get_height():
+                pixel = pen_image.get_at((x, y))
+                if pixel.a and _colors_match(pixel, color):
+                    return True
+
         return False
 
     def change_layer(self, util: 'Util', value: int):
@@ -569,7 +739,7 @@ class Target:
             if name == "_myself_":
                 target = self
             else:
-                target = util.sprites.targets.get(name)
+                target = _lookup_target(util, name)
                 if target is None:
                     return
 
@@ -622,6 +792,54 @@ def warp(func):
         with self.warp:
             return await func(self, *args)
     return wrapper
+
+
+def _parse_color(value: Any) -> pg.Color:
+    """Parse a Scratch color literal into a pygame Color."""
+    if isinstance(value, pg.Color):
+        return value
+    if isinstance(value, str):
+        try:
+            return pg.Color(value)
+        except ValueError:
+            return pg.Color("black")
+    try:
+        number = int(float(value)) % 0x1000000
+    except (TypeError, ValueError, OverflowError):
+        return pg.Color("black")
+    return pg.Color((number << 8) | 255)
+
+
+def _colors_match(pixel: pg.Color, color: pg.Color, tolerance: int = 18) -> bool:
+    """Compare RGB values with small tolerance for antialiased SVG edges."""
+    return (
+        abs(pixel.r - color.r) <= tolerance and
+        abs(pixel.g - color.g) <= tolerance and
+        abs(pixel.b - color.b) <= tolerance
+    )
+
+
+def _sprite_point_matches_color(sprite: DirtySprite, point: Tuple[int, int], color: pg.Color) -> bool:
+    """Return whether a sprite has a matching opaque pixel at screen point."""
+    rect = sprite.rect
+    x = point[0] - rect.x
+    y = point[1] - rect.y
+    if x < 0 or y < 0 or x >= rect.width or y >= rect.height:
+        return False
+
+    try:
+        source_rect = sprite.source_rect
+    except AttributeError:
+        source_rect = None
+    if source_rect is not None:
+        x += source_rect.x
+        y += source_rect.y
+
+    try:
+        pixel = sprite.image.get_at((x, y))
+    except IndexError:
+        return False
+    return pixel.a and _colors_match(pixel, color)
 
 
 @types.coroutine
